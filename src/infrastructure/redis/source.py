@@ -26,6 +26,7 @@ class RedisSource:
             host=self._config.host,
             port=self._config.port,
             db=self._config.database,
+            username=self._config.username,
             password=password,
             socket_connect_timeout=self._timeout,
             socket_timeout=self._timeout,
