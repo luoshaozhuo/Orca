@@ -59,6 +59,7 @@ def test_load_config() -> None:
     config = load_config(CONFIG)
     assert config.site.site_id == "my_site"
     assert "wtg001" in config.resources
+    assert config.wind_hub.collector.target == "127.0.0.1:50051"
 
 
 def test_redis_key_contract() -> None:
