@@ -13,7 +13,7 @@ requires-python = ">=3.12"
 dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.10"]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/orca"]
+packages = ["src/core", "src/algorithms", "src/control", "src/commissioning", "src/evaluation", "src/optimization", "src/infrastructure"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

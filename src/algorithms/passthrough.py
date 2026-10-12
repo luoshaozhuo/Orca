@@ -1,6 +1,6 @@
 """仅用于骨架验证的透传策略，禁止连接实际设备。"""
 
-from orca.core.contracts import ControlProblem, ControlResult
+from core.contracts import ControlProblem, ControlResult
 
 
 class PassthroughStrategy:

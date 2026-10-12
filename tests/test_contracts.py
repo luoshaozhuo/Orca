@@ -1,7 +1,7 @@
 """验证最小内存策略契约。"""
 
-from orca.algorithms.passthrough import PassthroughStrategy
-from orca.core.contracts import ControlProblem, ControlResult
+from algorithms.passthrough import PassthroughStrategy
+from core.contracts import ControlProblem, ControlResult
 
 
 def test_passthrough_strategy() -> None:
