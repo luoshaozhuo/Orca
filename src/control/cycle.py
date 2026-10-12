@@ -29,7 +29,7 @@ class ControlCycle:
         self.commander = commander
         self.strategy = strategy
 
-    async def execute(self, task_id: str) -> str | None:
+    async def execute(self, task_id: str, *, allow_write: bool = False) -> str | None:
         """失败时返回原因；任何前置条件未满足均不得写设备。"""
         task = self.config.tasks[task_id]
         pairs = [
@@ -57,6 +57,8 @@ class ControlCycle:
         errors = validate_decision(self.config, task_id, decision)
         if errors:
             return "; ".join(errors)
+        if decision.outputs and not allow_write:
+            return "output disabled: field command permissions are unverified"
         for item in decision.outputs:
             point_id = self.config.resources[item.device_id].outputs[item.variable].point_id
             command_id = uuid4().hex

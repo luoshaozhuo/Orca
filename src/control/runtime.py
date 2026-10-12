@@ -70,17 +70,19 @@ class ControlRuntime:
                         for resource_id in self.config.tasks[task_id].resource_ids
                         for variable in self.config.resources[resource_id].inputs.values()
                     ]
-                    records = await self.source.latest(pairs)
-                    errors = validate_inputs(self.config, task_id, records)
-                    if errors:
-                        self.reasons[task_id] = "; ".join(errors)
-                        continue
-                    self.reasons.pop(task_id, None)
-                    # 实际写入默认禁用；只有完成输出权限、控制权和现场安全验证后才能开放。
-                    if self.cycle is not None and self.write_enabled:
-                        reason = await self.cycle.execute(task_id)
+                    if self.cycle is not None:
+                        reason = await self.cycle.execute(task_id, allow_write=self.write_enabled)
                         if reason:
                             self.reasons[task_id] = reason
+                        else:
+                            self.reasons.pop(task_id, None)
+                    else:
+                        records = await self.source.latest(pairs)
+                        errors = validate_inputs(self.config, task_id, records)
+                        if errors:
+                            self.reasons[task_id] = "; ".join(errors)
+                        else:
+                            self.reasons.pop(task_id, None)
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:

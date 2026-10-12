@@ -23,6 +23,8 @@ class ControlApplication:
         timeout = config.wind_hub.watchdog.timeout
         self.redis = RedisSource(config.wind_hub.redis, timeout)
         self.commander = CommanderClient(config.wind_hub.commander.target, timeout)
+        if any(controller.enabled and controller.strategy != "noop" for controller in config.controllers.values()):
+            raise ValueError("unsupported strategy: only noop is available before field commissioning")
         self.cycle = ControlCycle(config, self.redis, self.commander, NoOpStrategy())
         self.runtime = ControlRuntime(config, self.redis, self.cycle)
         self.watchdog = WindHubWatchdog(config, self.runtime, self.redis, self.commander)
