@@ -12,6 +12,7 @@ def validate_decision(config: OrcaConfig, task_id: str, decision: ControlDecisio
     task = config.tasks[task_id]
     errors: list[str] = []
     seen: set[tuple[str, str]] = set()
+    physical_targets: set[tuple[str, str]] = set()
     for item in decision.outputs:
         key = (item.device_id, item.variable)
         if key in seen:
@@ -24,6 +25,10 @@ def validate_decision(config: OrcaConfig, task_id: str, decision: ControlDecisio
         if output is None:
             errors.append(f"unknown output: {item.device_id}/{item.variable}")
         else:
+            physical = (item.device_id, output.point_id)
+            if physical in physical_targets:
+                errors.append(f"duplicate physical output: {physical}")
+            physical_targets.add(physical)
             if output.minimum is not None and item.value < output.minimum:
                 errors.append(f"below minimum: {item.device_id}/{item.variable}")
             if output.maximum is not None and item.value > output.maximum:

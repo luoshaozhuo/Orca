@@ -46,3 +46,28 @@ async def test_tasks_cannot_own_same_physical_output():
     assert not runtime._authority
     await runtime.start_task("second")
     await runtime.stop()
+
+def test_same_physical_point_cannot_receive_two_commands():
+    from core.domain.config import OrcaConfig
+
+    config = load_config(CONFIG)
+    raw = config.model_dump()
+    raw["resources"]["wtg001"]["outputs"]["alternate_name"] = {
+        "point_id": "active_power_setpoint",
+    }
+    config = OrcaConfig.model_validate(raw)
+    decision = ControlDecision((
+        Setpoint("wtg001", "active_power_setpoint", 2.0),
+        Setpoint("wtg001", "alternate_name", 2.0),
+    ))
+    assert any("duplicate physical output" in error for error in validate_decision(
+        config, "active_power", decision
+    ))
+
+
+def test_nonfinite_bound_rejected():
+    from pydantic import ValidationError
+    from core.domain.config import OutputConfig
+
+    with pytest.raises(ValidationError):
+        OutputConfig(point_id="setpoint", minimum=float("nan"))

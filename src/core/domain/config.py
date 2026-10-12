@@ -1,6 +1,8 @@
 """Orca 配置领域模型及跨引用验证。"""
 from __future__ import annotations
 
+import math
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -56,6 +58,10 @@ class OutputConfig(ConfigModel):
 
     @model_validator(mode="after")
     def validate_limits(self) -> OutputConfig:
+        for name in ("minimum", "maximum"):
+            value = getattr(self, name)
+            if value is not None and not math.isfinite(value):
+                raise ValueError(f"output {name} must be finite")
         if self.minimum is not None and self.maximum is not None:
             if self.minimum > self.maximum:
                 raise ValueError("output minimum exceeds maximum")
