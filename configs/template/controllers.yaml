@@ -1,5 +1,5 @@
 controllers:
   agc:
     type: agc
-    strategy: placeholder
+    strategy: noop
     enabled: true

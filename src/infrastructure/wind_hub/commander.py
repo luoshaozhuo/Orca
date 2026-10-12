@@ -49,3 +49,28 @@ class CommanderClient:
         if not response.ok:
             raise ValueError(f"{device_id}/{point_id}: {response.error or response.code}")
         return response.data_type
+
+    async def write_once(
+        self, command_id: str, device_id: str, point_id: str, value: float
+    ) -> str:
+        """单次 gRPC WritePoint；UNKNOWN 不重试、不自动重连后重发。"""
+        if self._stub is None:
+            raise ConnectionError("Commander is not connected")
+        request = pb.WritePointRequest(
+            command_id=command_id,
+            device_id=device_id,
+            point_id=point_id,
+            value=pb.ScalarValue(double_value=value),
+            timeout=self._timeout,
+        )
+        result = await self._stub.WritePoint(
+            request, timeout=self._timeout, wait_for_ready=False
+        )
+        if result.command_id != command_id:
+            raise ValueError("Commander command_id mismatch: outcome unknown")
+        outcomes = {
+            pb.COMMAND_OUTCOME_CONFIRMED_SUCCESS: "CONFIRMED_SUCCESS",
+            pb.COMMAND_OUTCOME_CONFIRMED_FAILURE: "CONFIRMED_FAILURE",
+            pb.COMMAND_OUTCOME_UNKNOWN: "UNKNOWN",
+        }
+        return outcomes.get(result.outcome, "UNKNOWN")

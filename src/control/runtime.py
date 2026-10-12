@@ -6,6 +6,7 @@ import logging
 
 from core.domain.config import OrcaConfig
 from core.application.validation import validate_inputs
+from .cycle import ControlCycle
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +14,11 @@ logger = logging.getLogger(__name__)
 class ControlRuntime:
     """独立任务顺序执行；首阶段仅实现预检查和空控制循环。"""
 
-    def __init__(self, config: OrcaConfig, source: object) -> None:
+    def __init__(self, config: OrcaConfig, source: object, cycle: ControlCycle | None = None) -> None:
         self.config = config
         self.source = source
+        self.cycle = cycle
+        self.write_enabled = False
         self.states = {name: "STOPPED" for name in config.tasks}
         self.reasons: dict[str, str] = {}
         self._workers: dict[str, asyncio.Task[None]] = {}
@@ -73,7 +76,11 @@ class ControlRuntime:
                         self.reasons[task_id] = "; ".join(errors)
                         continue
                     self.reasons.pop(task_id, None)
-                    # UC1 只建立周期与输入门禁；UC2 才执行算法及 Commander 写入。
+                    # 实际写入默认禁用；只有完成输出权限、控制权和现场安全验证后才能开放。
+                    if self.cycle is not None and self.write_enabled:
+                        reason = await self.cycle.execute(task_id)
+                        if reason:
+                            self.reasons[task_id] = reason
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:

@@ -10,6 +10,8 @@ from infrastructure.redis.source import RedisSource
 
 from core.domain.config import OrcaConfig
 from .runtime import ControlRuntime
+from .cycle import ControlCycle
+from algorithms.noop import NoOpStrategy
 from infrastructure.wind_hub.watchdog import WindHubWatchdog
 
 
@@ -21,7 +23,8 @@ class ControlApplication:
         timeout = config.wind_hub.watchdog.timeout
         self.redis = RedisSource(config.wind_hub.redis, timeout)
         self.commander = CommanderClient(config.wind_hub.commander.target, timeout)
-        self.runtime = ControlRuntime(config, self.redis)
+        self.cycle = ControlCycle(config, self.redis, self.commander, NoOpStrategy())
+        self.runtime = ControlRuntime(config, self.redis, self.cycle)
         self.watchdog = WindHubWatchdog(config, self.runtime, self.redis, self.commander)
         self._server: asyncio.AbstractServer | None = None
         self._socket = Path(config.runtime.socket_path)
