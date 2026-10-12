@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from uuid import uuid4
 
 from core.application.port.command import CommandPort
@@ -51,6 +52,8 @@ class ControlCycle:
                 value = record["value"]
                 if isinstance(value, bool) or not isinstance(value, (float, int)):
                     return f"{device_id}/{name}: numeric value required"
+                if not math.isfinite(float(value)):
+                    return f"{device_id}/{name}: non-finite input"
                 values[name] = float(value)
             measurements[device_id] = values
         decision = self.strategy.solve(measurements)
