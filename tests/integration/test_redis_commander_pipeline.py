@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import grpc
 import pytest
 import pytest_asyncio
 import redis.asyncio as redis
@@ -16,6 +17,7 @@ from infrastructure.redis.source import RedisSource
 from infrastructure.wind_hub.commander import CommanderClient
 from infrastructure.wind_hub.watchdog import WindHubWatchdog
 from infrastructure.wind_hub.rpc import commander_pb2 as pb
+from tests.support.collector import CollectorScenario, start_collector
 from tests.support.docker_redis import docker_redis_port
 from tests.support.redis_data import publish_measurement
 from tests.support.services import CommanderScenario, start_commander
@@ -148,3 +150,31 @@ async def test_watchdog_revalidates_commander_revision(redis_instance, commander
     finally:
         await commander.close()
         await source.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.mock_service
+async def test_simulated_collector_status_rpc():
+    from google.protobuf.empty_pb2 import Empty
+
+    scenario = CollectorScenario()
+    server, target = await start_collector(scenario)
+    channel = grpc.aio.insecure_channel(target)
+    rpc = channel.unary_unary(
+        "/windhub.collector.v1.CollectorRuntimeService/GetCollectorInfo",
+        request_serializer=Empty.SerializeToString,
+        response_deserializer=lambda raw: raw,
+    )
+    try:
+        from tests.support.collector import CollectorInfo
+
+        response = CollectorInfo.FromString(await rpc(Empty(), timeout=1.0))
+        assert response.runtime_running
+        assert response.active_revision == "revision-a"
+        scenario.revision = "revision-b"
+        changed = CollectorInfo.FromString(await rpc(Empty(), timeout=1.0))
+        assert changed.active_revision == "revision-b"
+    finally:
+        await channel.close()
+        await server.stop(grace=0)
