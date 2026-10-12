@@ -1,0 +1,5 @@
+controllers:
+  agc:
+    type: agc
+    strategy: noop
+    enabled: true

@@ -1,0 +1,17 @@
+site:
+  site_id: my_site
+  name: My Plant
+runtime:
+  shutdown_timeout: 10.0
+  socket_path: /tmp/orca-control.sock
+wind_hub:
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    database: 0
+    key_prefix: windhub
+  commander:
+    target: 127.0.0.1:50052
+  watchdog:
+    interval: 5.0
+    timeout: 1.0
