@@ -22,6 +22,11 @@ packages = ["src/core", "src/algorithms", "src/control", "src/commissioning", "s
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "integration: collaboration of actual components and services",
+    "real_service: requires a real local software service",
+    "mock_service: uses a simulated network service",
+]
 
 [tool.ruff]
 line-length = 100

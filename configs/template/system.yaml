@@ -7,9 +7,13 @@ runtime:
 wind_hub:
   redis:
     host: 127.0.0.1
-    port: 6379
+    port: 16379
     database: 0
     key_prefix: windhub
+    username: orca
+    password_env: ORCA_REDIS_PASSWORD
+  collector:
+    target: 127.0.0.1:50051
   commander:
     target: 127.0.0.1:50052
   watchdog:

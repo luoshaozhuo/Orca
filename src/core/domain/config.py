@@ -20,7 +20,12 @@ class RedisConfig(ConfigModel):
     port: int = Field(default=6379, ge=1, le=65535)
     database: int = Field(default=0, ge=0)
     key_prefix: str = Field(default="windhub", min_length=1)
+    username: str | None = None
     password_env: str | None = None
+
+
+class CollectorConfig(ConfigModel):
+    target: str = Field(min_length=1)
 
 
 class CommanderConfig(ConfigModel):
@@ -34,6 +39,7 @@ class WatchdogConfig(ConfigModel):
 
 class WindHubConfig(ConfigModel):
     redis: RedisConfig = Field(default_factory=RedisConfig)
+    collector: CollectorConfig
     commander: CommanderConfig = Field(default_factory=CommanderConfig)
     watchdog: WatchdogConfig = Field(default_factory=WatchdogConfig)
 
