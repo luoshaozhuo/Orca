@@ -1,0 +1,23 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/ai_shared/agent_config/hooks/git-safety-gate.py\"",
+            "timeout": 30,
+            "statusMessage": "Checking Git branch safety"
+          },
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/ai_shared/agent_config/hooks/block-dangerous-bash.py\"",
+            "timeout": 30,
+            "statusMessage": "Checking dangerous shell command"
+          }
+        ]
+      }
+    ]
+  }
+}
