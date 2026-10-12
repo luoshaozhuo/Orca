@@ -23,6 +23,10 @@ class RedisConfig(ConfigModel):
     password_env: str | None = None
 
 
+class CollectorConfig(ConfigModel):
+    target: str = Field(min_length=1)
+
+
 class CommanderConfig(ConfigModel):
     target: str = "127.0.0.1:50052"
 
@@ -34,6 +38,7 @@ class WatchdogConfig(ConfigModel):
 
 class WindHubConfig(ConfigModel):
     redis: RedisConfig = Field(default_factory=RedisConfig)
+    collector: CollectorConfig
     commander: CommanderConfig = Field(default_factory=CommanderConfig)
     watchdog: WatchdogConfig = Field(default_factory=WatchdogConfig)
 
