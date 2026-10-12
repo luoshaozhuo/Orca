@@ -18,12 +18,16 @@ class ControlRuntime:
         self.config = config
         self.source = source
         self.cycle = cycle
-        self.write_enabled = False
+        self.write_enabled = False  # 现场写权限未验证；生产装配不得自动放开
         self.states = {name: "STOPPED" for name in config.tasks}
         self.reasons: dict[str, str] = {}
         self._workers: dict[str, asyncio.Task[None]] = {}
         self.ready = False
         self._authority: dict[tuple[str, str], str] = {}
+
+    def output_owner(self, device_id: str, point_id: str) -> str | None:
+        """按物理输出测点查询当前控制任务。"""
+        return self._authority.get((device_id, point_id))
 
     async def start_task(self, task_id: str) -> None:
         if task_id not in self.states:
@@ -70,7 +74,7 @@ class ControlRuntime:
             await self.stop_task(task_id)
 
     async def _run_task(self, task_id: str) -> None:
-        """周期执行不重叠、不补算；无输出，不调用任何控制策略。"""
+        """周期顺序执行，超期跳过触发点，不积压历史控制指令。"""
         interval = self.config.tasks[task_id].interval
         loop = asyncio.get_running_loop()
         deadline = loop.time()
@@ -88,7 +92,10 @@ class ControlRuntime:
                         for variable in self.config.resources[resource_id].inputs.values()
                     ]
                     if self.cycle is not None:
-                        reason = await self.cycle.execute(task_id, allow_write=self.write_enabled and self.ready)
+                        reason = await self.cycle.execute(
+                            task_id,
+                            can_write=lambda: self.write_enabled and self.ready,
+                        )
                         if reason:
                             self.reasons[task_id] = reason
                         else:

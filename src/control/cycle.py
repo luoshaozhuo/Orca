@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import math
 from uuid import uuid4
+from collections.abc import Callable
 
 from core.application.port.command import CommandPort
 from core.application.port.strategy import ControlStrategy
@@ -30,7 +31,13 @@ class ControlCycle:
         self.commander = commander
         self.strategy = strategy
 
-    async def execute(self, task_id: str, *, allow_write: bool = False) -> str | None:
+    async def execute(
+        self,
+        task_id: str,
+        *,
+        allow_write: bool = False,
+        can_write: Callable[[], bool] | None = None,
+    ) -> str | None:
         """失败时返回原因；任何前置条件未满足均不得写设备。"""
         task = self.config.tasks[task_id]
         pairs = [
@@ -60,10 +67,16 @@ class ControlCycle:
         errors = validate_decision(self.config, task_id, decision)
         if errors:
             return "; ".join(errors)
-        if decision.outputs and not allow_write:
-            return "output disabled: field command permissions are unverified"
+        def permitted() -> bool:
+            return can_write() if can_write is not None else allow_write
+
+        if decision.outputs and not permitted():
+            return "output disabled: dependencies or field permissions unverified"
         # 完成决策全量校验后才可能发生第一次设备写入。
         for item in decision.outputs:
+            # 每条写入前重新检查：不能沿用周期开始时的健康快照。
+            if not permitted():
+                return "output disabled: dependency state changed"
             point_id = self.config.resources[item.device_id].outputs[item.variable].point_id
             command_id = uuid4().hex
             try:

@@ -63,8 +63,7 @@ class WindHubWatchdog:
             await self.check_once()
 
     async def check_once(self) -> None:
-        # 健康巡检期间保守禁止写入，防止连接变化时继续使用旧映射。
-        self.runtime.ready = False
+        # 正常巡检不清除就绪状态；发生故障或配置变化时立即闭锁。
         self.last_error = None
         try:
             await self.redis.ping()
@@ -72,6 +71,7 @@ class WindHubWatchdog:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            self.runtime.ready = False
             self.redis_ok = False
             try:
                 await self.redis.connect()

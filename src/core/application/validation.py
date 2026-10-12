@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import math
 from typing import Any
 
 from core.domain.config import OrcaConfig
@@ -35,7 +36,7 @@ def validate_inputs(
                 if timestamp.tzinfo is None:
                     raise ValueError("naive timestamp")
                 age = (clock - timestamp).total_seconds()
-                if age < -variable.stale_timeout or age > variable.stale_timeout:
+                if not math.isfinite(age) or age < -variable.stale_timeout or age > variable.stale_timeout:
                     errors.append(f"{device_id}/{name}: stale (age={age:.3f}s)")
             except (KeyError, TypeError, ValueError):
                 errors.append(f"{device_id}/{name}: invalid timestamp")
