@@ -51,6 +51,15 @@ class VariableConfig(ConfigModel):
 class OutputConfig(ConfigModel):
     point_id: str = Field(min_length=1)
     data_type: str | None = None
+    minimum: float | None = None
+    maximum: float | None = None
+
+    @model_validator(mode="after")
+    def validate_limits(self) -> OutputConfig:
+        if self.minimum is not None and self.maximum is not None:
+            if self.minimum > self.maximum:
+                raise ValueError("output minimum exceeds maximum")
+        return self
 
 
 class ResourceConfig(ConfigModel):

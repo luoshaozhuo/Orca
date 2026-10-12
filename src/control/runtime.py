@@ -23,6 +23,7 @@ class ControlRuntime:
         self.reasons: dict[str, str] = {}
         self._workers: dict[str, asyncio.Task[None]] = {}
         self.ready = False
+        self._authority: dict[tuple[str, str], str] = {}
 
     async def start_task(self, task_id: str) -> None:
         if task_id not in self.states:
@@ -33,6 +34,16 @@ class ControlRuntime:
             return
         if not self.ready:
             raise RuntimeError("dependencies or point mappings are not verified")
+        targets = {
+            (device_id, output.point_id)
+            for device_id in self.config.tasks[task_id].resource_ids
+            for output in self.config.resources[device_id].outputs.values()
+        }
+        for target in targets:
+            if owner := self._authority.get(target):
+                raise RuntimeError(f"output {target} is already owned by task {owner}")
+        for target in targets:
+            self._authority[target] = task_id
         self.states[task_id] = "RUNNING"
         self._workers[task_id] = asyncio.create_task(self._run_task(task_id))
 
@@ -47,6 +58,12 @@ class ControlRuntime:
             except asyncio.CancelledError:
                 pass
         self.states[task_id] = "STOPPED"
+        self._release_authority(task_id)
+
+    def _release_authority(self, task_id: str) -> None:
+        for target, owner in list(self._authority.items()):
+            if owner == task_id:
+                del self._authority[target]
 
     async def stop(self) -> None:
         for task_id in list(self.states):
@@ -71,7 +88,7 @@ class ControlRuntime:
                         for variable in self.config.resources[resource_id].inputs.values()
                     ]
                     if self.cycle is not None:
-                        reason = await self.cycle.execute(task_id, allow_write=self.write_enabled)
+                        reason = await self.cycle.execute(task_id, allow_write=self.write_enabled and self.ready)
                         if reason:
                             self.reasons[task_id] = reason
                         else:
@@ -90,3 +107,4 @@ class ControlRuntime:
                     logger.warning("control task %s skipped: %s", task_id, exc)
         finally:
             self.states[task_id] = "STOPPED"
+            self._release_authority(task_id)

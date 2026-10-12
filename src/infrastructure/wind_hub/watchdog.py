@@ -63,6 +63,8 @@ class WindHubWatchdog:
             await self.check_once()
 
     async def check_once(self) -> None:
+        # 健康巡检期间保守禁止写入，防止连接变化时继续使用旧映射。
+        self.runtime.ready = False
         self.last_error = None
         try:
             await self.redis.ping()

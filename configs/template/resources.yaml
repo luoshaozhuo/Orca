@@ -10,3 +10,5 @@ resources:
     outputs:
       active_power_setpoint:
         point_id: active_power_setpoint
+        minimum: 0.0
+        maximum: 5.0

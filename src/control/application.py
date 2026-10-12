@@ -62,6 +62,7 @@ class ControlApplication:
             "output_access_verified": self.watchdog.output_access_verified,
             "last_error": self.watchdog.last_error,
             "tasks": self.runtime.states.copy(),
+            "output_owners": {f"{device}/{point}": owner for (device, point), owner in self.runtime._authority.items()},
             "task_reasons": self.runtime.reasons.copy(),
         }
 

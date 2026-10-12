@@ -59,6 +59,7 @@ class ControlCycle:
             return "; ".join(errors)
         if decision.outputs and not allow_write:
             return "output disabled: field command permissions are unverified"
+        # 完成决策全量校验后才可能发生第一次设备写入。
         for item in decision.outputs:
             point_id = self.config.resources[item.device_id].outputs[item.variable].point_id
             command_id = uuid4().hex

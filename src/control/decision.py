@@ -20,8 +20,14 @@ def validate_decision(config: OrcaConfig, task_id: str, decision: ControlDecisio
         if item.device_id not in task.resource_ids:
             errors.append(f"device outside task: {item.device_id}")
             continue
-        if item.variable not in config.resources[item.device_id].outputs:
+        output = config.resources[item.device_id].outputs.get(item.variable)
+        if output is None:
             errors.append(f"unknown output: {item.device_id}/{item.variable}")
+        else:
+            if output.minimum is not None and item.value < output.minimum:
+                errors.append(f"below minimum: {item.device_id}/{item.variable}")
+            if output.maximum is not None and item.value > output.maximum:
+                errors.append(f"above maximum: {item.device_id}/{item.variable}")
         if not math.isfinite(item.value):
             errors.append(f"non-finite value: {item.device_id}/{item.variable}")
     return errors
