@@ -10,6 +10,8 @@ wind_hub:
     port: 6379
     database: 0
     key_prefix: windhub
+  collector:
+    target: 127.0.0.1:50051
   commander:
     target: 127.0.0.1:50052
   watchdog:
