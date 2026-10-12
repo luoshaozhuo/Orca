@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Orca renewable power plant coordinated control"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["pydantic>=2.8,<3", "PyYAML>=6,<7", "redis>=5,<7", "grpcio>=1.81,<2", "protobuf>=6.33,<7"]
+dependencies = ["pydantic>=2.8,<3", "PyYAML>=6,<7", "redis>=5,<7", "grpcio>=1.81.1,<2", "protobuf>=6.33.5,<7"]
 
 [project.scripts]
 orca = "cli.main:main"

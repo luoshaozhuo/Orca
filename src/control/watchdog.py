@@ -63,7 +63,6 @@ class WindHubWatchdog:
             await self.check_once()
 
     async def check_once(self) -> None:
-        self.runtime.ready = False
         self.last_error = None
         try:
             await self.redis.ping()
@@ -87,6 +86,8 @@ class WindHubWatchdog:
                 raise ConnectionError("Commander is not running")
             self.commander_ok = True
             if revision != self._revision or not self.point_mappings_ok:
+                self.runtime.ready = False
+                self.point_mappings_ok = False
                 await self._verify_mappings()
                 self._revision = revision
         except asyncio.CancelledError:
@@ -94,6 +95,7 @@ class WindHubWatchdog:
         except Exception as exc:
             self.commander_ok = False
             self.point_mappings_ok = False
+            self.runtime.ready = False
             try:
                 await self.commander.connect()
                 running, revision = await self.commander.status()
@@ -118,5 +120,10 @@ class WindHubWatchdog:
             if device_id not in devices:
                 raise ValueError(f"Commander missing enabled device {device_id}")
             for variable in (*resource.inputs.values(), *resource.outputs.values()):
-                await self.commander.resolve_point(device_id, variable.point_id)
+                actual_type = await self.commander.resolve_point(device_id, variable.point_id)
+                if variable.data_type is not None and actual_type != variable.data_type:
+                    raise ValueError(
+                        f"{device_id}/{variable.point_id}: type {actual_type}, "
+                        f"expected {variable.data_type}"
+                    )
         self.point_mappings_ok = True

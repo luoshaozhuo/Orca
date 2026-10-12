@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
-
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -47,12 +45,14 @@ class RuntimeConfig(ConfigModel):
 
 class VariableConfig(ConfigModel):
     point_id: str = Field(min_length=1)
+    data_type: str | None = None
     required: bool = True
     stale_timeout: float = Field(default=5.0, gt=0)
 
 
 class OutputConfig(ConfigModel):
     point_id: str = Field(min_length=1)
+    data_type: str | None = None
 
 
 class ResourceConfig(ConfigModel):

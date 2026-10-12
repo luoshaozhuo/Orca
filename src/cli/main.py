@@ -41,16 +41,17 @@ async def _run(config_path: str) -> None:
 def main() -> None:
     """解析参数并执行启动、校验或控制操作。"""
     parser = argparse.ArgumentParser(prog="orca")
-    parser.add_argument("--config", default="configs/template")
     commands = parser.add_subparsers(dest="action", required=True)
-    commands.add_parser("run")
-    commands.add_parser("validate-config")
-    commands.add_parser("status")
+    run = commands.add_parser("run")
+    valid = commands.add_parser("validate-config")
+    status = commands.add_parser("status")
     start = commands.add_parser("start")
     start.add_argument("task")
     stop = commands.add_parser("stop")
     stop.add_argument("task", nargs="?")
     stop.add_argument("--all", action="store_true")
+    for command in (run, valid, status, start, stop):
+        command.add_argument("--config", default="configs/template")
     args = parser.parse_args()
     if args.action == "validate-config":
         config = load_config(args.config)
