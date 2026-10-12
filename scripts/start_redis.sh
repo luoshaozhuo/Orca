@@ -66,6 +66,7 @@ docker run -d \
     --name "$REDIS_NAME" \
     --label org.orca.redis.managed=true \
     --restart always \
+    --user "$(id -u):$(id -g)" \
     --publish "$REDIS_BIND_IP:$REDIS_HOST_PORT:$REDIS_CONTAINER_PORT" \
     --mount "type=bind,src=$REDIS_DATA_DIR,dst=/data" \
     --mount "type=bind,src=$REDIS_ACL_FILE,dst=/usr/local/etc/redis/users.acl,readonly" \
