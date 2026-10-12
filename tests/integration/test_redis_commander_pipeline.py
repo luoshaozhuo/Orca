@@ -11,6 +11,7 @@ from pathlib import Path
 
 import grpc
 import pytest
+import pytest_asyncio
 import redis.asyncio as redis
 
 from control.cycle import ControlCycle
@@ -62,7 +63,7 @@ class SimulatedCommander(pb_grpc.CommanderServiceServicer):
         return pb.CommandResultMessage(command_id=request.command_id, outcome=self.outcome)
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def redis_instance():
     """使用临时独立 Redis 进程，不触及默认 Redis 数据库。"""
     executable = shutil.which("redis-server")
@@ -101,7 +102,7 @@ async def redis_instance():
             process.stderr.close()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def commander_server():
     servicer = SimulatedCommander()
     server = grpc.aio.server()
