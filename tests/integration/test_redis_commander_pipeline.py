@@ -15,11 +15,13 @@ import pytest_asyncio
 import redis.asyncio as redis
 
 from control.cycle import ControlCycle
+from control.runtime import ControlRuntime
 from core.domain.config import RedisConfig
 from core.domain.decision import ControlDecision, Setpoint
 from infrastructure.config.yaml import load_config
 from infrastructure.redis.source import RedisSource
 from infrastructure.wind_hub.commander import CommanderClient
+from infrastructure.wind_hub.watchdog import WindHubWatchdog
 from infrastructure.wind_hub.rpc import commander_pb2 as pb
 from infrastructure.wind_hub.rpc import commander_pb2_grpc as pb_grpc
 
@@ -178,6 +180,38 @@ async def test_redis_to_commander_and_input_guards(redis_instance, commander_ser
         assert simulated.writes[0].command_id != simulated.writes[1].command_id
         # UNKNOWN 不重传历史命令。
         assert len({request.command_id for request in simulated.writes}) == 2
+    finally:
+        await commander.close()
+        await source.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.real_service
+@pytest.mark.mock_service
+async def test_watchdog_revalidates_commander_revision(redis_instance, commander_server):
+    port, _ = redis_instance
+    target, simulated = commander_server
+    config = load_config(CONFIG)
+    source = RedisSource(
+        RedisConfig(host="127.0.0.1", port=port, key_prefix="windhub-test"), timeout=1.0
+    )
+    commander = CommanderClient(target, timeout=1.0)
+    runtime = ControlRuntime(config, source)
+    watchdog = WindHubWatchdog(config, runtime, source, commander)
+    try:
+        await source.connect()
+        await commander.connect()
+        await watchdog.check_once()
+        assert runtime.ready
+        assert watchdog.point_mappings_ok
+        assert not watchdog.output_access_verified
+        simulated.revision = "revision-b"
+        await watchdog.check_once()
+        assert runtime.ready
+        # 当前 Commander 协议尚无 access 字段，不能将解析成功视作输出可写。
+        assert not watchdog.output_access_verified
+        assert not runtime.write_enabled
     finally:
         await commander.close()
         await source.close()
