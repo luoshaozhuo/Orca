@@ -7,7 +7,7 @@ runtime:
 wind_hub:
   redis:
     host: 127.0.0.1
-    port: 6379
+    port: 16379
     database: 0
     key_prefix: windhub
     username: orca
