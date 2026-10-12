@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Awaitable, Callable
 
-from .config import OrcaConfig
-from .validation import validate_inputs
+from core.domain.config import OrcaConfig
+from core.application.validation import validate_inputs
 
 logger = logging.getLogger(__name__)
 

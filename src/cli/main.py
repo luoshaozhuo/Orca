@@ -7,7 +7,7 @@ import json
 import signal
 
 from control.application import ControlApplication
-from control.config import load_config
+from infrastructure.config.yaml import load_config
 
 
 async def _request(socket_path: str, payload: dict) -> None:

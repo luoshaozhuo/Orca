@@ -5,8 +5,8 @@ import asyncio
 import logging
 from typing import Protocol
 
-from .config import OrcaConfig
-from .runtime import ControlRuntime
+from core.domain.config import OrcaConfig
+from control.runtime import ControlRuntime
 
 logger = logging.getLogger(__name__)
 

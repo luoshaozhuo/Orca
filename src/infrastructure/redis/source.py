@@ -8,7 +8,7 @@ from typing import Any
 
 import redis.asyncio as redis
 
-from control.config import RedisConfig
+from core.domain.config import RedisConfig
 
 
 class RedisSource:

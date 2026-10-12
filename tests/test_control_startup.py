@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-from control.config import load_config
+from infrastructure.config.yaml import load_config
 from control.runtime import ControlRuntime
-from control.validation import validate_inputs
-from control.watchdog import WindHubWatchdog
+from core.application.validation import validate_inputs
+from infrastructure.wind_hub.watchdog import WindHubWatchdog
 
 CONFIG = Path(__file__).resolve().parents[1] / "configs" / "template"
 
@@ -62,7 +62,7 @@ def test_load_config() -> None:
 
 
 def test_redis_key_contract() -> None:
-    from infrastructure.wind_hub.redis_source import RedisSource
+    from infrastructure.redis.source import RedisSource
     assert RedisSource.key("windhub", "wtg001", "active_power") == "windhub:6:wtg001:12:active_power"
 
 

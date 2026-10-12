@@ -1,8 +1,6 @@
-"""Orca 控制服务配置：只描述控制资源，不复制 wind-hub 协议配置。"""
+"""Orca 配置领域模型及跨引用验证。"""
 from __future__ import annotations
 
-from pathlib import Path
-import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -98,45 +96,3 @@ class OrcaConfig(ConfigModel):
         return self
 
 
-class _UniqueLoader(yaml.SafeLoader):
-    """拒绝同一 YAML 映射中的重复键。"""
-
-
-def _mapping(loader: _UniqueLoader, node: yaml.MappingNode) -> dict:
-    result: dict = {}
-    for key_node, value_node in node.value:
-        key = loader.construct_object(key_node)
-        if key in result:
-            raise ValueError(f"duplicate YAML key: {key}")
-        result[key] = loader.construct_object(value_node, deep=True)
-    return result
-
-
-_UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _mapping)
-
-
-def load_config(directory: str | Path) -> OrcaConfig:
-    """从四份 YAML 文件加载并严格验证 Orca 配置。"""
-    base = Path(directory)
-    documents: dict[str, dict] = {}
-    for name in ("system", "resources", "controllers", "tasks"):
-        path = base / f"{name}.yaml"
-        with path.open(encoding="utf-8") as handle:
-            value = yaml.load(handle, Loader=_UniqueLoader)
-        if not isinstance(value, dict):
-            raise ValueError(f"{path}: root must be a mapping")
-        documents[name] = value
-    system = documents["system"]
-    extra = set(system) - {"site", "runtime", "wind_hub"}
-    if extra:
-        raise ValueError(f"system.yaml: unknown keys: {sorted(extra)}")
-    for name, key in (("resources", "resources"), ("controllers", "controllers"), ("tasks", "tasks")):
-        extra = set(documents[name]) - {key}
-        if extra:
-            raise ValueError(f"{name}.yaml: unknown keys: {sorted(extra)}")
-    return OrcaConfig.model_validate({
-        **system,
-        "resources": documents["resources"].get("resources", {}),
-        "controllers": documents["controllers"].get("controllers", {}),
-        "tasks": documents["tasks"].get("tasks", {}),
-    })

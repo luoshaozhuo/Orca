@@ -6,11 +6,11 @@ import json
 from pathlib import Path
 
 from infrastructure.wind_hub.commander import CommanderClient
-from infrastructure.wind_hub.redis_source import RedisSource
+from infrastructure.redis.source import RedisSource
 
-from .config import OrcaConfig
+from core.domain.config import OrcaConfig
 from .runtime import ControlRuntime
-from .watchdog import WindHubWatchdog
+from infrastructure.wind_hub.watchdog import WindHubWatchdog
 
 
 class ControlApplication:

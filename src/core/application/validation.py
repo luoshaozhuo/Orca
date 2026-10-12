@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from .config import OrcaConfig
+from core.domain.config import OrcaConfig
 
 
 def validate_inputs(
