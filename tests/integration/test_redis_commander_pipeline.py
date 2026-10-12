@@ -1,15 +1,8 @@
 """使用隔离的 Redis 实例和本地 Commander gRPC 服务验证控制链。"""
 from __future__ import annotations
 
-import asyncio
-import json
-import shutil
-import socket
-import subprocess
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import grpc
 import pytest
 import pytest_asyncio
 import redis.asyncio as redis
@@ -23,7 +16,9 @@ from infrastructure.redis.source import RedisSource
 from infrastructure.wind_hub.commander import CommanderClient
 from infrastructure.wind_hub.watchdog import WindHubWatchdog
 from infrastructure.wind_hub.rpc import commander_pb2 as pb
-from infrastructure.wind_hub.rpc import commander_pb2_grpc as pb_grpc
+from tests.support.docker_redis import docker_redis_port
+from tests.support.redis_data import publish_measurement
+from tests.support.services import CommanderScenario, start_commander
 
 CONFIG = Path(__file__).resolve().parents[2] / "configs" / "template"
 PAIR = ("wtg001", "active_power")
@@ -38,95 +33,33 @@ class SimulatedStrategy:
         return ControlDecision((Setpoint("wtg001", "active_power_setpoint", 2.0),))
 
 
-class SimulatedCommander(pb_grpc.CommanderServiceServicer):
-    def __init__(self) -> None:
-        self.writes: list[pb.WritePointRequest] = []
-        self.outcome = pb.COMMAND_OUTCOME_CONFIRMED_SUCCESS
-        self.revision = "revision-a"
-
-    async def GetStatus(self, request, context):
-        return pb.CommanderStatusResponse(running=True, active_config_hash=self.revision)
-
-    async def ListDevices(self, request, context):
-        return pb.ListDevicesResponse(devices=[pb.DeviceSummary(device_id="wtg001", enabled=True)])
-
-    async def ResolvePoint(self, request, context):
-        if request.device_id != "wtg001" or request.point_id not in {
-            "active_power", "active_power_setpoint"
-        }:
-            return pb.PointVerifyResponse(ok=False, error="unknown point")
-        return pb.PointVerifyResponse(
-            ok=True, device_id=request.device_id,
-            point_id=request.point_id, data_type="float32",
-        )
-
-    async def WritePoint(self, request, context):
-        self.writes.append(request)
-        return pb.CommandResultMessage(command_id=request.command_id, outcome=self.outcome)
-
-
 @pytest_asyncio.fixture
-async def redis_instance():
-    """使用临时独立 Redis 进程，不触及默认 Redis 数据库。"""
-    executable = shutil.which("redis-server")
-    if executable is None:
-        pytest.skip("redis-server executable is required for real-service integration")
-    with socket.socket() as sock:
-        sock.bind(("127.0.0.1", 0))
-        port = sock.getsockname()[1]
-    process = subprocess.Popen(
-        [executable, "--bind", "127.0.0.1", "--port", str(port),
-         "--save", "", "--appendonly", "no", "--protected-mode", "yes"],
-        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+async def redis_instance(docker_redis_port):
+    client = redis.Redis(
+        host="127.0.0.1", port=docker_redis_port, decode_responses=True,
     )
-    client = redis.Redis(host="127.0.0.1", port=port, decode_responses=True)
     try:
-        for _ in range(100):
-            if process.poll() is not None:
-                raise RuntimeError("test Redis terminated unexpectedly")
-            try:
-                await client.ping()
-                break
-            except redis.ConnectionError:
-                await asyncio.sleep(0.02)
-        else:
-            raise RuntimeError("test Redis did not become ready")
-        yield port, client
+        assert await client.ping()
+        yield docker_redis_port, client
     finally:
         await client.aclose()
-        process.terminate()
-        try:
-            process.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=3)
-        if process.stderr is not None:
-            process.stderr.close()
 
 
 @pytest_asyncio.fixture
 async def commander_server():
-    servicer = SimulatedCommander()
-    server = grpc.aio.server()
-    pb_grpc.add_CommanderServiceServicer_to_server(servicer, server)
-    port = server.add_insecure_port("127.0.0.1:0")
-    assert port > 0
-    await server.start()
+    scenario = CommanderScenario()
+    server, target = await start_commander(scenario)
     try:
-        yield f"127.0.0.1:{port}", servicer
+        yield target, scenario
     finally:
         await server.stop(grace=0)
 
 
-async def publish(client: redis.Redis, *, value: float = 1.5,
-                  quality: str = "good", age: float = 0.0) -> None:
-    record = {
-        "value": value,
-        "quality": quality,
-        "timestamp": (datetime.now(UTC) - timedelta(seconds=age)).isoformat(),
-        "source": "simulated-collector",
-    }
-    await client.set(RedisSource.key("windhub-test", *PAIR), json.dumps(record))
+async def publish(client, *, value=1.5, quality="good", age=0.0):
+    await publish_measurement(
+        client, *PAIR, value, prefix="windhub-test",
+        quality=quality, age_seconds=age,
+    )
 
 
 @pytest.mark.asyncio
