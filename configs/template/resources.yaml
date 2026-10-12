@@ -1,0 +1,12 @@
+resources:
+  wtg001:
+    type: turbine
+    enabled: true
+    inputs:
+      active_power:
+        point_id: active_power
+        required: true
+        stale_timeout: 3.0
+    outputs:
+      active_power_setpoint:
+        point_id: active_power_setpoint

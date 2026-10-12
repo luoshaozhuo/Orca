@@ -1,0 +1,6 @@
+tasks:
+  active_power:
+    controller_id: agc
+    interval: 1.0
+    enabled: true
+    resource_ids: [wtg001]
