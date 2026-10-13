@@ -15,8 +15,8 @@ from control.runtime import ControlRuntime
 from core.domain.decision import ControlDecision, Setpoint
 from infrastructure.redis.source import RedisSource
 from infrastructure.wind_hub.commander import CommanderClient
-from infrastructure.wind_hub.watchdog import WindHubWatchdog
 from infrastructure.wind_hub.rpc import commander_pb2 as pb
+from infrastructure.wind_hub.watchdog import WindHubWatchdog
 from tests.integration.conftest import derive_test_config
 from tests.support.commander import CommanderPoint, CommanderScenario
 
@@ -63,7 +63,7 @@ async def assemble(orca_config, commander_server):
 
 
 async def test_input_guards_and_write_path(orca_config, data_publisher, commander_server) -> None:
-    config, device, source, commander, cycle, scenario, strategy = \
+    _config, device, source, commander, cycle, scenario, strategy = \
         await assemble(orca_config, commander_server)
     pair = (device, "active_power")
     try:
