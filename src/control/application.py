@@ -9,6 +9,7 @@ from infrastructure.wind_hub.commander import CommanderClient
 from infrastructure.redis.source import RedisSource
 
 from core.domain.config import OrcaConfig
+from core.application.reference_manager import ReferenceManager
 from .runtime import ControlRuntime
 from .cycle import ControlCycle
 from algorithms.noop import NoOpStrategy
@@ -20,6 +21,7 @@ class ControlApplication:
 
     def __init__(self, config: OrcaConfig) -> None:
         self.config = config
+        self.references = ReferenceManager.from_controllers(config.controllers)
         timeout = config.wind_hub.watchdog.timeout
         self.redis = RedisSource(config.wind_hub.redis, timeout)
         self.commander = CommanderClient(config.wind_hub.commander.target, timeout)
