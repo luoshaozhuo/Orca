@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import logging
 import math
-from uuid import uuid4
 from collections.abc import Callable
+from uuid import uuid4
 
 from core.application.port.command import CommandPort
 from core.application.port.strategy import ControlStrategy

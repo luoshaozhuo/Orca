@@ -10,7 +10,9 @@ import pytest
 from core.application.joint_power_allocator import JointPowerAllocator
 from core.domain.capability_snapshot import DeviceCapabilityRecord, DeviceCapabilitySnapshot
 from core.domain.device_capability import (
-    DevicePQCapability, DeviceTechnology, StorageEnergyLimits,
+    DevicePQCapability,
+    DeviceTechnology,
+    StorageEnergyLimits,
 )
 from core.domain.device_ramp import DeviceRampLimits
 

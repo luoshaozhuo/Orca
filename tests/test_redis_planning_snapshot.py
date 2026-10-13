@@ -1,25 +1,34 @@
 """Redis 实时测量及参考仲裁规划快照的集成测试。"""
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from time import time_ns
-from dataclasses import replace
 
 import pytest
 
 from core.application.reference_manager import ReferenceManager
 from core.domain.control_value import (
-    ControlQuantity, ControlScope, ControlValue, ControlValueKind, ControlValueRole,
-)
-from core.domain.reference import (
-    ArbitrationMode, ControlReference, ReferencePurpose, ReferenceSelection,
-    ReferenceSource,
+    ControlQuantity,
+    ControlScope,
+    ControlValue,
+    ControlValueKind,
+    ControlValueRole,
 )
 from core.domain.device_capability import DeviceTechnology
+from core.domain.reference import (
+    ArbitrationMode,
+    ControlReference,
+    ReferencePurpose,
+    ReferenceSelection,
+    ReferenceSource,
+)
 from infrastructure.redis.planning_snapshot import (
-    ActivePlanningBinding, DevicePlanningBinding, RedisPlanningSnapshotSource,
-    StoragePlanningBinding,
+    ActivePlanningBinding,
+    DevicePlanningBinding,
     PlanningReferenceBinding,
+    RedisPlanningSnapshotSource,
+    StoragePlanningBinding,
 )
 
 

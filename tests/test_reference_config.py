@@ -11,7 +11,6 @@ from core.domain.config import ControllerConfig
 from core.domain.reference import ReferencePurpose, ReferenceSource
 from infrastructure.config.yaml import load_config
 
-
 CONFIGS = Path(__file__).resolve().parents[1] / "configs"
 
 

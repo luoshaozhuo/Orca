@@ -12,7 +12,6 @@ from core.application.reference_generators import (
 from core.domain.control_value import ControlValueKind
 from core.domain.reference import ReferencePurpose, ReferenceSource
 
-
 PFR = PFRParameters(50.0, 0.05, 100.0, 6.0, 10.0)
 IR = InertiaParameters(20.0, 3.0, 5.0)
 

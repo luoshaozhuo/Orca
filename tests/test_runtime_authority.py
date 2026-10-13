@@ -9,7 +9,6 @@ from control.runtime import ControlRuntime
 from core.domain.control_authority import AuthorityMode, ControlFunction
 from infrastructure.config.yaml import load_config
 
-
 CONFIG = Path(__file__).resolve().parents[1] / "configs"
 
 

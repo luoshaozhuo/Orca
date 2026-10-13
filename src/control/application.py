@@ -5,25 +5,23 @@ import asyncio
 import json
 from pathlib import Path
 
-from infrastructure.wind_hub.commander import CommanderClient
-from infrastructure.redis.source import RedisSource
-
-from core.application.control_coordinator import ControlCoordinator
+from algorithms.noop import NoOpStrategy
 from core.application.active_power_controller import ActivePowerController
-from core.application.joint_power_allocator import JointPowerAllocator
-from core.application.read_only_planning_cycle import ReadOnlyPlanningCycle
-from core.application.safe_plan_dispatcher import SafePlanDispatcher
-from core.application.dispatch_mapping import validate_dispatch_bindings
-from core.domain.safe_dispatch import OutputBinding
-from core.application.port.planning_snapshot import PlanningSnapshotPort
+from core.application.control_coordinator import ControlCoordinator
 from core.application.control_pipeline_factory import build_control_pipeline
+from core.application.dispatch_mapping import validate_dispatch_bindings
 from core.application.internal_reference import InternalReferenceService
+from core.application.joint_power_allocator import JointPowerAllocator
+from core.application.port.planning_snapshot import PlanningSnapshotPort
+from core.application.read_only_planning_cycle import ReadOnlyPlanningCycle
 from core.application.reference_manager import ReferenceManager
+from core.application.safe_plan_dispatcher import SafePlanDispatcher
 from core.domain.config import ControlPipelineConfig, OrcaConfig
 from core.domain.control_authority import ControlFunction
 from core.domain.control_value import ControlQuantity
 from core.domain.coordination import CoordinationFunction
 from core.domain.device_capability import DeviceTechnology
+from core.domain.safe_dispatch import OutputBinding
 from infrastructure.redis.planning_snapshot import (
     ActivePlanningBinding,
     DevicePlanningBinding,
@@ -31,10 +29,12 @@ from infrastructure.redis.planning_snapshot import (
     RedisPlanningSnapshotSource,
     StoragePlanningBinding,
 )
-from .runtime import ControlRuntime
-from .cycle import ControlCycle
-from algorithms.noop import NoOpStrategy
+from infrastructure.redis.source import RedisSource
+from infrastructure.wind_hub.commander import CommanderClient
 from infrastructure.wind_hub.watchdog import WindHubWatchdog
+
+from .cycle import ControlCycle
+from .runtime import ControlRuntime
 
 
 class ControlApplication:

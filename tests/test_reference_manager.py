@@ -19,7 +19,6 @@ from core.domain.reference import (
     ReferenceSource,
 )
 
-
 PURPOSE = ReferencePurpose.PFR_DELTA
 TARGET = "POI"
 

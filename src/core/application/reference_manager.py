@@ -15,7 +15,6 @@ from core.domain.reference import (
     select_reference,
 )
 
-
 if TYPE_CHECKING:
     from core.domain.config import ControllerConfig
 
@@ -44,7 +43,7 @@ class ReferenceManager:
     @classmethod
     def from_controllers(
         cls,
-        controllers: dict[str, "ControllerConfig"],
+        controllers: dict[str, ControllerConfig],
     ) -> ReferenceManager:
         """由已验证的控制器配置建立来源策略；跨控制器的键不可重复。"""
         policies: dict[ReferenceKey, ReferenceSelection] = {}

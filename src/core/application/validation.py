@@ -1,8 +1,8 @@
 """输入质量及新鲜度判断；只有当前周期检查，不依赖看门狗。"""
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import math
+from datetime import UTC, datetime
 from typing import Any
 
 from core.domain.config import OrcaConfig

@@ -6,9 +6,10 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
+from core.application.validation import validate_inputs
 from core.domain.config import OrcaConfig
 from core.domain.control_authority import ControlAuthority, ControlFunction
-from core.application.validation import validate_inputs
+
 from .cycle import ControlCycle
 
 if TYPE_CHECKING:

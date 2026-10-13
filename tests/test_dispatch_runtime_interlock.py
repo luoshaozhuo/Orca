@@ -6,10 +6,9 @@ from dataclasses import dataclass
 
 import pytest
 
-from core.domain.safe_dispatch import DispatchReceipt, DispatchStatus
-
 from control.runtime import ControlRuntime
 from core.domain.config import OrcaConfig
+from core.domain.safe_dispatch import DispatchReceipt, DispatchStatus
 
 
 def config() -> OrcaConfig:

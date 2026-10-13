@@ -17,7 +17,11 @@ from core.application.read_only_planning_cycle import ReadOnlyPlanningCycle
 from core.domain.capability_snapshot import DeviceCapabilityRecord, DeviceCapabilitySnapshot
 from core.domain.config import CoordinationPolicyConfig
 from core.domain.control_value import (
-    ControlQuantity, ControlScope, ControlValue, ControlValueKind, ControlValueRole,
+    ControlQuantity,
+    ControlScope,
+    ControlValue,
+    ControlValueKind,
+    ControlValueRole,
 )
 from core.domain.device_capability import DevicePQCapability, DeviceTechnology
 

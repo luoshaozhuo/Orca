@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import math
 import time
-from dataclasses import dataclass
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -24,11 +24,15 @@ from core.domain.control_value import (
 )
 from core.domain.coordination import CoordinationFunction
 from core.domain.device_capability import (
-    DevicePQCapability, DeviceTechnology, StorageEnergyLimits,
+    DevicePQCapability,
+    DeviceTechnology,
+    StorageEnergyLimits,
 )
 from core.domain.device_ramp import DeviceRampLimits
 from core.domain.reference import (
-    ControlReference, ReferencePurpose, ReferenceSource,
+    ControlReference,
+    ReferencePurpose,
+    ReferenceSource,
 )
 
 

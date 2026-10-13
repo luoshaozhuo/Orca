@@ -7,12 +7,15 @@ from dataclasses import replace
 
 import pytest
 
-from core.application.safe_plan_dispatcher import SafePlanDispatcher
-from core.application.read_only_planning_cycle import PlanningCycleResult
 from core.application.joint_power_allocator import JointAllocationResult
+from core.application.read_only_planning_cycle import PlanningCycleResult
+from core.application.safe_plan_dispatcher import SafePlanDispatcher
 from core.domain.control_value import (
-    ControlQuantity, ControlScope, ControlValue,
-    ControlValueKind, ControlValueRole,
+    ControlQuantity,
+    ControlScope,
+    ControlValue,
+    ControlValueKind,
+    ControlValueRole,
 )
 from core.domain.safe_dispatch import DispatchStatus, OutputBinding
 

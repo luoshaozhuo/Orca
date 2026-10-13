@@ -8,7 +8,7 @@ from core.application.control_laws import DirectControlLaw, PIControlLaw
 from core.application.control_pipeline_factory import build_control_pipeline
 from core.application.control_signal import LowPassSignal
 from core.application.control_trajectory import RampTrajectory
-from core.domain.config import ControlPipelineConfig, ControllerConfig
+from core.domain.config import ControllerConfig, ControlPipelineConfig
 
 
 def test_pipeline_configuration_assembles_each_stage() -> None:
