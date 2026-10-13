@@ -1,7 +1,7 @@
 """冻结设备能力快照；同一版本内 P/Q、SOC、旁路及爬坡信息一致。"""
 from __future__ import annotations
 
-import math
+from dataclasses import replace
 from dataclasses import dataclass
 
 from core.domain.device_capability import (
@@ -69,8 +69,6 @@ class DeviceCapabilitySnapshot:
 
     def bounded(self) -> tuple[DevicePQCapability, ...]:
         """计算单周期可调边界；未获得完整数据不得推断能力。"""
-        from dataclasses import replace
-
         result: list[DevicePQCapability] = []
         for record in self.records:
             item = record.capability
