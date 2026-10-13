@@ -196,6 +196,12 @@ class ControlRuntime:
                             self._inflight_dispatch.add(task_id)
                             try:
                                 receipt = await self._dispatcher.dispatch(task_id, result)
+                            except asyncio.CancelledError:
+                                self._block_dispatch(
+                                    task_id,
+                                    "in-flight Commander dispatch cancelled; outcome UNKNOWN",
+                                )
+                                raise
                             finally:
                                 self._inflight_dispatch.discard(task_id)
                             if receipt.status != "CONFIRMED_SUCCESS":
