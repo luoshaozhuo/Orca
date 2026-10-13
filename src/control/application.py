@@ -134,7 +134,7 @@ class ControlApplication:
                 self.redis,
                 self.references,
                 planning_bindings,
-                generation=0,
+                generation=config.runtime.planning_generation,
                 maximum_age_ns=int(config.wind_hub.watchdog.interval * 1e9),
                 can_plan=self._can_plan_device,
                 can_contribute=self._can_contribute,
