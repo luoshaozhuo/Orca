@@ -12,6 +12,9 @@ from core.application.control_coordinator import ControlCoordinator
 from core.application.active_power_controller import ActivePowerController
 from core.application.joint_power_allocator import JointPowerAllocator
 from core.application.read_only_planning_cycle import ReadOnlyPlanningCycle
+from core.application.safe_plan_dispatcher import SafePlanDispatcher
+from core.application.dispatch_mapping import validate_dispatch_bindings
+from core.domain.safe_dispatch import OutputBinding
 from core.application.port.planning_snapshot import PlanningSnapshotPort
 from core.application.control_pipeline_factory import build_control_pipeline
 from core.application.internal_reference import InternalReferenceService
