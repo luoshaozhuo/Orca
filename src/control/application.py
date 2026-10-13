@@ -28,10 +28,13 @@ class ControlApplication:
         self.active_power_coordinator = ControlCoordinator(
             config.coordination.active_power
         )
+        # 算法状态按任务隔离；共享 Controller 配置不意味着共享积分状态。
         self.control_pipelines = {
-            controller_id: build_control_pipeline(controller.pipeline)
-            for controller_id, controller in config.controllers.items()
-            if controller.enabled
+            task_id: build_control_pipeline(
+                config.controllers[task.controller_id].pipeline
+            )
+            for task_id, task in config.tasks.items()
+            if task.enabled
         }
         timeout = config.wind_hub.watchdog.timeout
         self.redis = RedisSource(config.wind_hub.redis, timeout)
@@ -39,13 +42,21 @@ class ControlApplication:
         if any(controller.enabled and controller.strategy != "noop" for controller in config.controllers.values()):
             raise ValueError("unsupported strategy: only noop is available before field commissioning")
         self.cycle = ControlCycle(config, self.redis, self.commander, NoOpStrategy())
-        self.runtime = ControlRuntime(config, self.redis, self.cycle)
+        self.runtime = ControlRuntime(
+            config, self.redis, self.cycle,
+            reset_control_state=self._reset_control_state,
+        )
         self.internal_references = InternalReferenceService(
             self.references, self.runtime.control_authority,
         )
         self.watchdog = WindHubWatchdog(config, self.runtime, self.redis, self.commander)
         self._server: asyncio.AbstractServer | None = None
         self._socket = Path(config.runtime.socket_path)
+
+    def _reset_control_state(self, task_id: str) -> None:
+        pipeline = self.control_pipelines.get(task_id)
+        if pipeline is not None:
+            pipeline.reset()
 
     async def start(self) -> None:
         if self._socket.exists():
