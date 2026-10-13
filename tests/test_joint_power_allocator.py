@@ -274,3 +274,24 @@ def test_joint_allocator_respects_reactive_power_weights() -> None:
     assert {item.target: item.value for item in result.reactive} == pytest.approx(
         {"high": 6.0, "low": 2.0}
     )
+
+
+def test_weighted_projection_respects_apparent_power_boundary() -> None:
+    s = snapshot(
+        record(replace(device("a"), p_weight=5.0, q_weight=1.0)),
+        record(replace(device("b"), p_weight=1.0, q_weight=5.0)),
+    )
+    result = solve(s, 12.0, 12.0)
+    assert result.feasible
+    assert result.reason is None
+    assert all(
+        math.hypot(active.value, reactive.value) <= 10.000001
+        for active, reactive in zip(result.active, result.reactive)
+    )
+
+
+def test_impossible_target_reports_failure_reason() -> None:
+    result = solve(snapshot(record(device("wtg"))), 20.0, 0.0)
+    assert not result.feasible
+    assert result.reason == "active_power_outside_capability"
+    assert result.iterations == 0
