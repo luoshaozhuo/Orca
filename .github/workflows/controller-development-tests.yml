@@ -19,6 +19,8 @@ jobs:
           python-version: '3.12'
       - name: Install project and tooling
         run: python -m pip install -e ".[dev]"
+      - name: Static lint
+        run: python -m ruff check src tests
       - name: Syntax compilation
         run: python -m compileall -q src tests
       - name: Targeted controller unit tests
