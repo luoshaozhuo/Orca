@@ -16,7 +16,7 @@ from core.application.port.planning_snapshot import PlanningSnapshotPort
 from core.application.control_pipeline_factory import build_control_pipeline
 from core.application.internal_reference import InternalReferenceService
 from core.application.reference_manager import ReferenceManager
-from core.domain.config import OrcaConfig
+from core.domain.config import ControlPipelineConfig, OrcaConfig
 from core.domain.control_authority import ControlFunction
 from core.domain.control_value import ControlQuantity
 from core.domain.coordination import CoordinationFunction
@@ -219,6 +219,32 @@ class ControlApplication:
         pipeline = self.control_pipelines.get(task_id)
         if pipeline is not None:
             pipeline.reset()
+
+    def replace_task_pipeline(
+        self,
+        task_id: str,
+        config: ControlPipelineConfig,
+        *,
+        authorized: bool,
+    ) -> None:
+        """停止状态下替换算法；旧状态不得迁移或隐式恢复自动任务。"""
+        if not authorized:
+            raise PermissionError("pipeline change requires authorization")
+        if task_id not in self.control_pipelines:
+            raise ValueError(f"unknown or disabled pipeline task: {task_id}")
+        if self.runtime.states[task_id] != "STOPPED":
+            raise RuntimeError("pipeline switch requires a stopped task")
+        updated = build_control_pipeline(config)
+        old = self.control_pipelines[task_id]
+        old.reset()
+        self.control_pipelines[task_id] = updated
+        self.runtime.planning_results.pop(task_id, None)
+        planning = self.runtime._planning_cycle
+        if isinstance(planning, ReadOnlyPlanningCycle) and task_id in self.runtime._planning_tasks:
+            planning.replace_controller(
+                task_id,
+                ActivePowerController(updated, self.active_power_coordinator),
+            )
 
     async def start(self) -> None:
         if self._socket.exists():
