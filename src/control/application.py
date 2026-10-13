@@ -24,6 +24,7 @@ from infrastructure.redis.planning_snapshot import (
     ActivePlanningBinding,
     DevicePlanningBinding,
     RedisPlanningSnapshotSource,
+    StoragePlanningBinding,
 )
 from .runtime import ControlRuntime
 from .cycle import ControlCycle
@@ -90,6 +91,21 @@ class ControlApplication:
                             s_max=device.s_max,
                             p_auto=device.p_auto, q_auto=device.q_auto,
                             p_weight=device.p_weight, q_weight=device.q_weight,
+                            p_ramp_up=device.p_ramp_up,
+                            p_ramp_down=device.p_ramp_down,
+                            q_ramp_up=device.q_ramp_up,
+                            q_ramp_down=device.q_ramp_down,
+                            storage=(
+                                StoragePlanningBinding(
+                                    soc_point=device.storage.soc_point,
+                                    soc_min=device.storage.soc_min,
+                                    soc_max=device.storage.soc_max,
+                                    energy_mwh=device.storage.energy_mwh,
+                                    charge_efficiency=device.storage.charge_efficiency,
+                                    discharge_efficiency=device.storage.discharge_efficiency,
+                                )
+                                if device.storage is not None else None
+                            ),
                         )
                         for device in plan.devices
                     ),
