@@ -1,6 +1,7 @@
 """Commander 安全执行：最终门禁、整批校验、UNKNOWN 单次语义。"""
 from __future__ import annotations
 
+import asyncio
 import time
 
 import pytest
@@ -134,3 +135,17 @@ async def test_recheck_authority_before_each_command() -> None:
     assert result.status == DispatchStatus.BLOCKED
     assert len(commander.calls) == 1
     assert result.confirmed == 1
+
+
+@pytest.mark.asyncio
+async def test_inflight_cancellation_is_unknown_without_retry() -> None:
+    class CancelledCommander(Commander):
+        async def write_once(self, command_id, device_id, point_id, value):
+            self.calls.append((command_id, device_id, point_id, value))
+            raise asyncio.CancelledError()
+
+    commander = CancelledCommander()
+    receipt = await dispatcher(commander).dispatch("agc", plan(second=True))
+    assert receipt.status == DispatchStatus.UNKNOWN
+    assert receipt.confirmed == 0
+    assert len(commander.calls) == 1
