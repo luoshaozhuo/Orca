@@ -23,6 +23,7 @@ from core.domain.device_capability import DeviceTechnology
 from infrastructure.redis.planning_snapshot import (
     ActivePlanningBinding,
     DevicePlanningBinding,
+    PlanningReferenceBinding,
     RedisPlanningSnapshotSource,
     StoragePlanningBinding,
 )
@@ -79,6 +80,16 @@ class ControlApplication:
                     dt_s=task.interval,
                     authorized_sources=frozenset(plan.authorized_sources),
                     active_functions=frozenset(plan.active_functions),
+                    reference_inputs=tuple(
+                        PlanningReferenceBinding(
+                            purpose=reference.purpose,
+                            source=reference.source,
+                            resource_id=reference.resource_id,
+                            point_id=reference.point_id,
+                            valid_for_ns=int(reference.valid_for_s * 1e9),
+                        )
+                        for reference in plan.reference_inputs
+                    ),
                     maximum_skew_ns=plan.maximum_skew_ns,
                     devices=tuple(
                         DevicePlanningBinding(
