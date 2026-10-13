@@ -116,3 +116,39 @@ async def test_unknown_result_disables_writes_and_prevents_new_cycles() -> None:
         await runtime.stop_task("active")
     with pytest.raises(RuntimeError, match="dispatch blocked"):
         await runtime.start_task("active")
+
+
+@dataclass
+class BlockingDispatcher:
+    started: asyncio.Event
+    calls: int = 0
+
+    async def dispatch(self, task_id: str, result: object) -> DispatchReceipt:
+        self.calls += 1
+        self.started.set()
+        await asyncio.Event().wait()
+        raise AssertionError("cancelled dispatch must not complete")
+
+
+@pytest.mark.asyncio
+async def test_stop_during_commander_dispatch_latches_unknown() -> None:
+    started = asyncio.Event()
+    planning = PlanningCycle()
+    dispatcher = BlockingDispatcher(started)
+    runtime = ControlRuntime(
+        config(), object(),
+        planning_cycle=planning,
+        planning_tasks=frozenset({"active"}),
+        dispatcher=dispatcher,  # type: ignore[arg-type]
+    )
+    runtime.ready = True
+    runtime.write_enabled = True
+    await runtime.start_task("active")
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+    await runtime.stop_task("active")
+    assert dispatcher.calls == 1
+    assert not runtime.write_enabled
+    assert "UNKNOWN" in runtime.dispatch_blocked["active"]
+    assert runtime.states["active"] == "STOPPED"
+    with pytest.raises(RuntimeError, match="dispatch blocked"):
+        await runtime.start_task("active")
