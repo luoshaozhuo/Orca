@@ -107,6 +107,27 @@ class JointPowerAllocator:
             )
             bounds.append((pl, ph, ql, qh, device.s_max))
 
+        # 快速必要条件：矩形可行域与视在功率总容量。
+        # 仅用于提前判不可行；通过检查仍需进行严格联合投影。
+        p_lower = math.fsum(bounds_i[0] for bounds_i in bounds)
+        p_upper = math.fsum(bounds_i[1] for bounds_i in bounds)
+        q_lower = math.fsum(bounds_i[2] for bounds_i in bounds)
+        q_upper = math.fsum(bounds_i[3] for bounds_i in bounds)
+        apparent_limit = math.fsum(item.s_max for item in devices)
+        if (
+            p_target < p_lower - tolerance
+            or p_target > p_upper + tolerance
+            or q_target < q_lower - tolerance
+            or q_target > q_upper + tolerance
+            or math.hypot(p_target, q_target) > apparent_limit + tolerance
+        ):
+            return JointAllocationResult(
+                active=(), reactive=(),
+                p_residual=p_target - math.fsum(item.p_current for item in devices),
+                q_residual=q_target - math.fsum(item.q_current for item in devices),
+                generation=snapshot.generation, feasible=False,
+            )
+
         # 全场投影要求严格守恒，投影中只有可自动调节的维度参与修正。
         movable_p = [i for i, item in enumerate(devices) if item.p_auto]
         movable_q = [i for i, item in enumerate(devices) if item.q_auto]
