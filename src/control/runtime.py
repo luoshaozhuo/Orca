@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
 from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from core.domain.config import OrcaConfig
 from core.domain.control_authority import ControlAuthority, ControlFunction
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from core.application.safe_plan_dispatcher import SafePlanDispatcher
 
 logger = logging.getLogger(__name__)
+
 
 
 class ControlRuntime:
@@ -45,6 +46,7 @@ class ControlRuntime:
         self._planning_tasks = planning_tasks
         self._dispatcher = dispatcher
         self.dispatch_blocked: dict[str, str] = {}
+        self._inflight_dispatch: set[str] = set()
         self.planning_results: dict[str, object] = {}
         self.write_enabled = False  # 现场写权限未验证；生产装配不得自动放开
         self.states = {name: "STOPPED" for name in config.tasks}
@@ -125,6 +127,12 @@ class ControlRuntime:
             raise RuntimeError("dispatch unblock requires stopped task")
         self.dispatch_blocked.pop(task_id, None)
 
+    def _block_dispatch(self, task_id: str, reason: str) -> None:
+        self.dispatch_blocked[task_id] = reason
+        self.reasons[task_id] = reason
+        self.write_enabled = False
+        self.planning_results.pop(task_id, None)
+
     def _reset_task_state(self, task_id: str) -> None:
         self.planning_results.pop(task_id, None)
         if self._planning_cycle is not None and task_id in self._planning_tasks:
@@ -137,6 +145,8 @@ class ControlRuntime:
             raise ValueError(f"unknown task: {task_id}")
         worker = self._workers.pop(task_id, None)
         if worker is not None:
+            if task_id in self._inflight_dispatch:
+                self._block_dispatch(task_id, "in-flight Commander write interrupted; outcome UNKNOWN")
             worker.cancel()
             try:
                 await worker
@@ -183,12 +193,14 @@ class ControlRuntime:
                         result = await self._planning_cycle.execute(task_id)
                         self.planning_results[task_id] = result
                         if self._dispatcher is not None and self.write_enabled:
-                            receipt = await self._dispatcher.dispatch(task_id, result)
+                            self._inflight_dispatch.add(task_id)
+                            try:
+                                receipt = await self._dispatcher.dispatch(task_id, result)
+                            finally:
+                                self._inflight_dispatch.discard(task_id)
                             if receipt.status != "CONFIRMED_SUCCESS":
                                 reason = f"dispatch {receipt.status}: {receipt.reason}"
-                                self.reasons[task_id] = reason
-                                self.dispatch_blocked[task_id] = reason
-                                self.write_enabled = False
+                                self._block_dispatch(task_id, reason)
                                 self._reset_task_state(task_id)
                                 continue
                         self.reasons.pop(task_id, None)
@@ -212,12 +224,17 @@ class ControlRuntime:
                         else:
                             self.reasons.pop(task_id, None)
                 except asyncio.CancelledError:
+                    if task_id in self._inflight_dispatch:
+                        self._block_dispatch(task_id, "in-flight command cancelled; outcome UNKNOWN")
                     raise
                 except Exception as exc:
                     self.reasons[task_id] = f"cycle failed: {exc}"
                     self._reset_task_state(task_id)
                     logger.warning("control task %s skipped: %s", task_id, exc)
         finally:
+            if task_id in self._inflight_dispatch:
+                self._block_dispatch(task_id, "in-flight command terminated; outcome UNKNOWN")
+                self._inflight_dispatch.discard(task_id)
             self.states[task_id] = "STOPPED"
             self._release_authority(task_id)
             self._reset_task_state(task_id)
