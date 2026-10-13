@@ -5,7 +5,20 @@ import math
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from core.domain.reference import ArbitrationMode, ReferencePurpose, ReferenceSelection, ReferenceSource
+from core.domain.coordination import (
+    CoordinationAlgorithm,
+    CoordinationFunction,
+    DirectionResolution,
+    ExclusiveSelect,
+    PfrAgcMode,
+    TieBreak,
+)
+from core.domain.reference import (
+    ArbitrationMode,
+    ReferencePurpose,
+    ReferenceSelection,
+    ReferenceSource,
+)
 
 
 class ConfigModel(BaseModel):
@@ -133,6 +146,157 @@ class TaskConfig(ConfigModel):
     resource_ids: list[str] = Field(min_length=1)
 
 
+class CoordinationParametersConfig(ConfigModel):
+    weights: dict[CoordinationFunction, float] = Field(default_factory=dict)
+    pfr_agc_mode: PfrAgcMode | None = None
+    ir_override: bool | None = None
+    tie_break: TieBreak | None = None
+    order: tuple[CoordinationFunction, ...] = ()
+    select: ExclusiveSelect | None = None
+    same_direction: DirectionResolution | None = None
+    opposite_direction: DirectionResolution | None = None
+    dominant: CoordinationFunction | None = None
+
+    @model_validator(mode="after")
+    def validate_values(self) -> CoordinationParametersConfig:
+        for function, weight in self.weights.items():
+            if not math.isfinite(weight) or weight < 0:
+                raise ValueError(
+                    f"coordination weight for {function} must be finite and nonnegative"
+                )
+        if len(self.order) != len(set(self.order)):
+            raise ValueError("coordination order contains duplicate functions")
+        return self
+
+    def validate_for(
+        self,
+        algorithm: CoordinationAlgorithm,
+        *,
+        functions: frozenset[CoordinationFunction],
+    ) -> None:
+        provided = self.model_fields_set
+        allowed: dict[CoordinationAlgorithm, frozenset[str]] = {
+            CoordinationAlgorithm.DEFAULT: frozenset(
+                {"weights", "pfr_agc_mode", "ir_override"}
+            ),
+            CoordinationAlgorithm.SUM: frozenset({"weights"}),
+            CoordinationAlgorithm.PRIORITY: frozenset({"tie_break", "order"}),
+            CoordinationAlgorithm.EXCLUSIVE: frozenset({"select", "order"}),
+            CoordinationAlgorithm.DIRECTIONAL: frozenset(
+                {
+                    "weights",
+                    "same_direction",
+                    "opposite_direction",
+                    "dominant",
+                }
+            ),
+        }
+        unexpected = provided - allowed[algorithm]
+        if unexpected:
+            raise ValueError(
+                f"{algorithm}: unsupported parameters {sorted(unexpected)}"
+            )
+
+        if set(self.weights) - functions:
+            raise ValueError("coordination weights contain functions outside the rule")
+        if set(self.order) - functions:
+            raise ValueError("coordination order contains functions outside the rule")
+        if self.dominant is not None and self.dominant not in functions:
+            raise ValueError("coordination dominant function is outside the rule")
+
+        if algorithm == CoordinationAlgorithm.DEFAULT:
+            if (
+                self.pfr_agc_mode is not None
+                and self.pfr_agc_mode != PfrAgcMode.SAME_DIRECTION_ADD
+            ):
+                raise ValueError("unsupported default PFR/AGC mode")
+
+        if algorithm == CoordinationAlgorithm.PRIORITY:
+            tie_break = self.tie_break or TieBreak.REJECT
+            if tie_break == TieBreak.FIXED_ORDER:
+                if set(self.order) != functions:
+                    raise ValueError(
+                        "priority fixed_order must list all participating functions"
+                    )
+            elif self.order:
+                raise ValueError("priority order requires tie_break=fixed_order")
+
+        if algorithm == CoordinationAlgorithm.EXCLUSIVE:
+            selection = self.select or ExclusiveSelect.HIGHEST_PRIORITY
+            if selection == ExclusiveSelect.FIXED_ORDER:
+                if set(self.order) != functions:
+                    raise ValueError(
+                        "exclusive fixed_order must list all participating functions"
+                    )
+            elif self.order:
+                raise ValueError("exclusive order requires select=fixed_order")
+
+        if algorithm == CoordinationAlgorithm.DIRECTIONAL:
+            same = self.same_direction or DirectionResolution.SUM
+            opposite = self.opposite_direction or DirectionResolution.SUM
+            if same == DirectionResolution.SUPPRESS:
+                raise ValueError("same_direction does not support suppress")
+            if opposite == DirectionResolution.SUPPRESS and self.dominant is None:
+                raise ValueError("directional suppress requires dominant")
+            if opposite != DirectionResolution.SUPPRESS and self.dominant is not None:
+                raise ValueError("dominant requires opposite_direction=suppress")
+
+
+class CoordinationRuleConfig(ConfigModel):
+    match: tuple[CoordinationFunction, ...] = Field(min_length=1)
+    algorithm: CoordinationAlgorithm
+    parameters: CoordinationParametersConfig = Field(
+        default_factory=CoordinationParametersConfig
+    )
+
+    @model_validator(mode="after")
+    def validate_rule(self) -> CoordinationRuleConfig:
+        functions = frozenset(self.match)
+        if len(functions) != len(self.match):
+            raise ValueError("coordination rule match contains duplicates")
+        self.parameters.validate_for(self.algorithm, functions=functions)
+        return self
+
+
+def _default_priority() -> dict[CoordinationFunction, int]:
+    return {
+        CoordinationFunction.IR: 1,
+        CoordinationFunction.PFR: 2,
+        CoordinationFunction.AGC: 3,
+    }
+
+
+class CoordinationPolicyConfig(ConfigModel):
+    algorithm: CoordinationAlgorithm = CoordinationAlgorithm.DEFAULT
+    priority: dict[CoordinationFunction, int] = Field(
+        default_factory=_default_priority
+    )
+    parameters: CoordinationParametersConfig = Field(
+        default_factory=CoordinationParametersConfig
+    )
+    rules: tuple[CoordinationRuleConfig, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_policy(self) -> CoordinationPolicyConfig:
+        functions = frozenset(CoordinationFunction)
+        if set(self.priority) != functions:
+            raise ValueError("coordination priority must define agc, pfr and ir")
+        if any(value < 0 for value in self.priority.values()):
+            raise ValueError("coordination priority must be nonnegative")
+        self.parameters.validate_for(self.algorithm, functions=functions)
+
+        matches = [frozenset(rule.match) for rule in self.rules]
+        if len(matches) != len(set(matches)):
+            raise ValueError("duplicate coordination rules.match")
+        return self
+
+
+class CoordinationConfig(ConfigModel):
+    active_power: CoordinationPolicyConfig = Field(
+        default_factory=CoordinationPolicyConfig
+    )
+
+
 class OrcaConfig(ConfigModel):
     site: SiteConfig
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
@@ -140,6 +304,7 @@ class OrcaConfig(ConfigModel):
     resources: dict[str, ResourceConfig]
     controllers: dict[str, ControllerConfig]
     tasks: dict[str, TaskConfig]
+    coordination: CoordinationConfig = Field(default_factory=CoordinationConfig)
 
     @model_validator(mode="after")
     def validate_references(self) -> OrcaConfig:
@@ -154,5 +319,3 @@ class OrcaConfig(ConfigModel):
                 if task.enabled and not self.resources[resource_id].enabled:
                     raise ValueError(f"task {name}: resource {resource_id} disabled")
         return self
-
-
