@@ -8,6 +8,18 @@ from core.application.control_laws import ControlLaw
 from core.domain.control_law import ControlLawInput, ControlLawResult
 
 
+class SignalProcessor(Protocol):
+    """反馈预处理策略。"""
+
+    def step(self, measurement: float, dt_s: float) -> float:
+        """处理一个周期的反馈。"""
+        ...
+
+    def reset(self) -> None:
+        """清除信号滤波状态。"""
+        ...
+
+
 class TrajectoryPlanner(Protocol):
     """独立参考轨迹策略。"""
 
@@ -26,17 +38,28 @@ class ControlPipeline:
 
     trajectory: TrajectoryPlanner
     law: ControlLaw
+    signal: SignalProcessor | None = None
 
     def evaluate(self, sample: ControlLawInput) -> ControlLawResult:
-        """用轨迹后的参考值执行控制律。"""
-        reference = self.trajectory.step(
-            sample.reference.value,
-            sample.dt_s,
+        """依次执行反馈滤波、参考轨迹、控制律。"""
+        processor = self.signal
+        if processor is not None:
+            measured = processor.step(sample.measurement.value, sample.dt_s)
+            sample = replace(
+                sample,
+                measurement=replace(sample.measurement, value=measured),
+            )
+        reference = self.trajectory.step(sample.reference.value, sample.dt_s)
+        return self.law.calculate(
+            replace(
+                sample,
+                reference=replace(sample.reference, value=reference),
+            )
         )
-        value = replace(sample.reference, value=reference)
-        return self.law.calculate(replace(sample, reference=value))
 
     def reset(self) -> None:
-        """功能退出时清除历史积分和参考轨迹。"""
+        """功能退出时清除滤波、历史积分和参考轨迹。"""
+        if self.signal is not None:
+            self.signal.reset()
         self.trajectory.reset()
         self.law.reset()
