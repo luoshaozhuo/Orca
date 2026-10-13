@@ -106,3 +106,17 @@ def test_mismatched_reference_and_feedback_are_rejected() -> None:
             minimum=0.0,
             maximum=100.0,
         )
+
+
+def test_proportional_overflow_is_rejected_not_saturated() -> None:
+    law = ProportionalControlLaw(kp=1e308)
+    with pytest.raises(ValueError, match="non-finite"):
+        law.calculate(sample(reference=1e308, measurement=-1e308))
+
+
+def test_pi_integral_overflow_fails_closed() -> None:
+    law = PIControlLaw(kp=0.0, ki=1e308)
+    extreme = sample(reference=1e308, measurement=0.0)
+    law.calculate(extreme)
+    with pytest.raises(ValueError, match="overflow"):
+        law.calculate(extreme)
