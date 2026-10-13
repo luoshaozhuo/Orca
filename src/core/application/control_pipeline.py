@@ -6,7 +6,6 @@ from typing import Protocol
 
 from core.application.control_laws import ControlLaw
 from core.domain.control_law import ControlLawInput, ControlLawResult
-from core.domain.control_value import ControlValue
 
 
 class TrajectoryPlanner(Protocol):
