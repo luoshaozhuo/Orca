@@ -60,26 +60,37 @@ class ReferenceManager:
         return cls(policies)
 
     def publish(self, sample: ControlReference) -> None:
-        key = (sample.purpose, sample.control.target)
-        if key not in self.policies:
-            raise ValueError(f"unconfigured reference: {key}")
-        source_key = (*key, sample.source)
-        previous = self._samples.get(source_key)
-        if previous is not None and (
-            sample.generation < previous.generation
-            or (
-                sample.generation == previous.generation
-                and (
-                    sample.sequence_id < previous.sequence_id
-                    or (
-                        sample.sequence_id == previous.sequence_id
-                        and sample.timestamp_ns <= previous.timestamp_ns
+        """提交单条参考，与批量提交采用相同的顺序和策略校验。"""
+        self.publish_many((sample,))
+
+    def publish_many(self, samples: tuple[ControlReference, ...]) -> None:
+        """整个参考批次校验成功后再替换缓存，拒绝任何部分更新。"""
+        updated = self._samples.copy()
+        for sample in samples:
+            key = (sample.purpose, sample.control.target)
+            policy = self.policies.get(key)
+            if policy is None:
+                raise ValueError(f"unconfigured reference: {key}")
+            if sample.source not in (policy.primary, *policy.backups):
+                raise ValueError(f"reference source not configured: {sample.source}")
+            source_key = (*key, sample.source)
+            previous = updated.get(source_key)
+            if previous is not None and (
+                sample.generation < previous.generation
+                or (
+                    sample.generation == previous.generation
+                    and (
+                        sample.sequence_id < previous.sequence_id
+                        or (
+                            sample.sequence_id == previous.sequence_id
+                            and sample.timestamp_ns <= previous.timestamp_ns
+                        )
                     )
                 )
-            )
-        ):
-            raise ValueError("out-of-order reference update")
-        self._samples[source_key] = sample
+            ):
+                raise ValueError("out-of-order reference update")
+            updated[source_key] = sample
+        self._samples = updated
 
     def select_source(
         self,
