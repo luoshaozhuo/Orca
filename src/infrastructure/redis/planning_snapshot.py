@@ -260,6 +260,23 @@ class RedisPlanningSnapshotSource:
             active_functions=binding.active_functions,
             required_generation=self._generation,
         )
+        purposes = [ReferencePurpose.ACTIVE_BASE]
+        if CoordinationFunction.PFR in binding.active_functions:
+            purposes.append(ReferencePurpose.PFR_DELTA)
+        if CoordinationFunction.IR in binding.active_functions:
+            purposes.append(ReferencePurpose.IR_DELTA)
+        expirations: list[int] = []
+        for purpose in purposes:
+            selected = self._references.current(
+                purpose,
+                binding.target,
+                now_ns=now_ns,
+                authorized_sources=binding.authorized_sources,
+            )
+            if selected is None:
+                raise ValueError(f"{purpose.value}: reference expired before snapshot")
+            expirations.append(selected.valid_until_ns)
+
         devices = tuple(
             DeviceCapabilityRecord(
                 capability=DevicePQCapability(
@@ -334,4 +351,7 @@ class RedisPlanningSnapshotSource:
                 valid_until_ns=max(timestamps) + self._maximum_age_ns,
             ),
             acquired_at_ns=max(timestamps),
+            expires_at_ns=min(
+                min(expirations), max(timestamps) + self._maximum_age_ns,
+            ),
         )
