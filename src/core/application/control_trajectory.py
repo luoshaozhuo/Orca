@@ -35,6 +35,11 @@ class RampTrajectory:
         ):
             raise ValueError("ramp limits must be finite and nonnegative")
 
+    @property
+    def initialized(self) -> bool:
+        """是否已从有效现场反馈完成轨迹初始化。"""
+        return self._previous is not None
+
     def initialize(self, output: float) -> None:
         """从已确认的输出初始化，禁止隐式假设为零。"""
         if not math.isfinite(output):
