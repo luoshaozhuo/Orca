@@ -9,6 +9,7 @@ from infrastructure.wind_hub.commander import CommanderClient
 from infrastructure.redis.source import RedisSource
 
 from core.application.control_coordinator import ControlCoordinator
+from core.application.control_pipeline_factory import build_control_pipeline
 from core.application.internal_reference import InternalReferenceService
 from core.application.reference_manager import ReferenceManager
 from core.domain.config import OrcaConfig
@@ -27,6 +28,11 @@ class ControlApplication:
         self.active_power_coordinator = ControlCoordinator(
             config.coordination.active_power
         )
+        self.control_pipelines = {
+            controller_id: build_control_pipeline(controller.pipeline)
+            for controller_id, controller in config.controllers.items()
+            if controller.enabled
+        }
         timeout = config.wind_hub.watchdog.timeout
         self.redis = RedisSource(config.wind_hub.redis, timeout)
         self.commander = CommanderClient(config.wind_hub.commander.target, timeout)
