@@ -29,7 +29,14 @@ def capability() -> DeviceCapabilitySnapshot:
         s_max=10.0,
     )
     return DeviceCapabilitySnapshot(
-        records=(DeviceCapabilityRecord(device, 100, 1),),
+        records=(
+            DeviceCapabilityRecord(
+                device, 100, 1,
+                quality_good=True,
+                p_authorized=True,
+                q_authorized=True,
+            ),
+        ),
         generation=1, sampled_at_ns=100, valid_until_ns=200,
     )
 
