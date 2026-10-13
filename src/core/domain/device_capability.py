@@ -30,6 +30,8 @@ class DevicePQCapability:
     s_max: float
     p_auto: bool = True
     q_auto: bool = True
+    p_weight: float = 1.0
+    q_weight: float = 1.0
 
     def __post_init__(self) -> None:
         if not self.device_id:
@@ -37,9 +39,12 @@ class DevicePQCapability:
         numbers = (
             self.p_current, self.q_current, self.p_min, self.p_max,
             self.q_min, self.q_max, self.s_max,
+            self.p_weight, self.q_weight,
         )
         if any(isinstance(v, bool) or not math.isfinite(v) for v in numbers):
             raise ValueError("device P/Q capability must be finite")
+        if self.p_weight <= 0 or self.q_weight <= 0:
+            raise ValueError("device allocation weights must be positive")
         if self.p_min > self.p_max or self.q_min > self.q_max or self.s_max <= 0:
             raise ValueError("invalid device P/Q limits")
         if self.p_auto and not self.p_min <= self.p_current <= self.p_max:
