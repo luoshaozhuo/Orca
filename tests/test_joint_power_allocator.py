@@ -99,7 +99,7 @@ def test_soc_and_ramp_are_applied_before_joint_allocation() -> None:
             storage=StorageEnergyLimits(
                 soc=0.2, soc_min=0.2, soc_max=0.8,
                 energy_mwh=1.0, charge_efficiency=1.0,
-                discharge_efficiency=1.0, horizon_s=3600.0,
+                discharge_efficiency=1.0, horizon_s=1.0,
             ),
             p_ramp=DeviceRampLimits(
                 up_per_s=1.0, down_per_s=1.0, horizon_s=1.0,
@@ -152,3 +152,23 @@ def test_mixed_quality_snapshot_is_rejected_even_if_other_device_can_supply() ->
     )
     with pytest.raises(ValueError, match="bad capability quality"):
         solve(s, 1.0, 1.0)
+
+
+def test_auto_storage_requires_fresh_soc_limits() -> None:
+    with pytest.raises(ValueError, match="requires SOC"):
+        record(device("ess", technology=DeviceTechnology.STORAGE))
+
+
+def test_storage_horizon_mismatch_rejected() -> None:
+    with pytest.raises(ValueError, match="horizons"):
+        record(
+            device("ess", technology=DeviceTechnology.STORAGE),
+            storage=StorageEnergyLimits(
+                soc=0.5, soc_min=0.1, soc_max=0.9,
+                energy_mwh=1.0, charge_efficiency=0.9,
+                discharge_efficiency=0.9, horizon_s=10.0,
+            ),
+            p_ramp=DeviceRampLimits(
+                up_per_s=1.0, down_per_s=1.0, horizon_s=1.0,
+            ),
+        )
