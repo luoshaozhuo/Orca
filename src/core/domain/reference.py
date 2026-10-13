@@ -115,10 +115,8 @@ def select_reference(
             raise ValueError(f"multiple active references from {candidate.source}")
         by_source[candidate.source] = candidate
 
-    for source in allowed:
-        if source not in authorized_sources or source not in by_source:
-            continue
-        if source != policy.primary and source != confirmed_source:
-            continue
-        return by_source[source]
-    return None
+    # 已确认切到备用来源后，不得因主源恢复而在同一周期隐式切回。
+    selected = confirmed_source if confirmed_source is not None else policy.primary
+    if selected not in allowed or selected not in authorized_sources:
+        return None
+    return by_source.get(selected)
