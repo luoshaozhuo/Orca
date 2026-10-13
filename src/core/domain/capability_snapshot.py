@@ -30,8 +30,20 @@ class DeviceCapabilityRecord:
             raise ValueError("invalid device capability timestamp or generation")
         if not isinstance(self.quality_good, bool):
             raise ValueError("invalid capability quality flag")
+        if (
+            self.capability.technology == DeviceTechnology.STORAGE
+            and self.capability.p_auto
+            and self.storage is None
+        ):
+            raise ValueError("auto-controlled storage requires SOC energy limits")
         if self.storage is not None and self.capability.technology != DeviceTechnology.STORAGE:
             raise ValueError("storage constraints require a storage device")
+        if (
+            self.storage is not None
+            and self.p_ramp is not None
+            and self.storage.horizon_s != self.p_ramp.horizon_s
+        ):
+            raise ValueError("storage and active ramp horizons must match")
 
 
 @dataclass(frozen=True, slots=True)
