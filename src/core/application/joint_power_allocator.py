@@ -22,6 +22,8 @@ class JointAllocationResult:
     q_residual: float
     generation: int
     feasible: bool
+    reason: str | None = None
+    iterations: int = 0
 
 
 def _clip(value: float, minimum: float, maximum: float) -> float:
@@ -134,8 +136,15 @@ class JointPowerAllocator:
             or q_target > q_upper + tolerance
             or math.hypot(p_target, q_target) > apparent_limit + tolerance
         ):
+            if p_target < p_lower - tolerance or p_target > p_upper + tolerance:
+                reason = "active_power_outside_capability"
+            elif q_target < q_lower - tolerance or q_target > q_upper + tolerance:
+                reason = "reactive_power_outside_capability"
+            else:
+                reason = "apparent_power_outside_capability"
             return JointAllocationResult(
                 active=(), reactive=(),
+                reason=reason,
                 p_residual=p_target - math.fsum(item.p_current for item in devices),
                 q_residual=q_target - math.fsum(item.q_current for item in devices),
                 generation=snapshot.generation, feasible=False,
@@ -155,7 +164,7 @@ class JointPowerAllocator:
         device_correction_p = [0.0] * n
         device_correction_q = [0.0] * n
 
-        for _ in range(max_iterations):
+        for iteration in range(1, max_iterations + 1):
             # 凸集 A：全场 P/Q 等式；凸集 B：逐设备矩形与能力圆。
             ap = [v + c for v, c in zip(p, correction_p)]
             aq = [v + c for v, c in zip(q, correction_q)]
@@ -219,6 +228,8 @@ class JointPowerAllocator:
                 active=(), reactive=(),
                 p_residual=p_residual, q_residual=q_residual,
                 generation=snapshot.generation, feasible=False,
+                reason="joint_infeasible_or_not_converged",
+                iterations=iteration,
             )
 
         active = tuple(
@@ -241,4 +252,5 @@ class JointPowerAllocator:
             active=active, reactive=reactive,
             p_residual=p_residual, q_residual=q_residual,
             generation=snapshot.generation, feasible=True,
+            iterations=iteration,
         )
