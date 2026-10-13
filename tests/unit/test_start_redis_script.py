@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "start_redis.sh"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "start_redis.sh"
 
 # fake docker：以文件记录容器状态，按 ACL 文件中的 SHA256 摘要校验认证。
 FAKE_DOCKER = r"""#!/usr/bin/env bash

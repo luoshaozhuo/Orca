@@ -11,7 +11,7 @@ from core.domain.config import ControllerConfig
 from core.domain.reference import ReferencePurpose, ReferenceSource
 from infrastructure.config.yaml import load_config
 
-CONFIGS = Path(__file__).resolve().parents[1] / "configs"
+CONFIGS = Path(__file__).resolve().parents[2] / "configs"
 
 
 def test_reference_policy_loads_from_controller_yaml() -> None:

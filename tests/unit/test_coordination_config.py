@@ -10,7 +10,7 @@ from core.domain.config import CoordinationPolicyConfig
 from core.domain.coordination import CoordinationAlgorithm
 from infrastructure.config.yaml import load_config
 
-CONFIGS = Path(__file__).resolve().parents[1] / "configs"
+CONFIGS = Path(__file__).resolve().parents[2] / "configs"
 
 
 def test_coordination_yaml_loads_default_policy() -> None:
