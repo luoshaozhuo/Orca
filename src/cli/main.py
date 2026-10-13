@@ -51,7 +51,7 @@ def main() -> None:
     stop.add_argument("task", nargs="?")
     stop.add_argument("--all", action="store_true")
     for command in (run, valid, status, start, stop):
-        command.add_argument("--config", default="configs/template")
+        command.add_argument("--config", default="configs")
     args = parser.parse_args()
     if args.action == "validate-config":
         config = load_config(args.config)
