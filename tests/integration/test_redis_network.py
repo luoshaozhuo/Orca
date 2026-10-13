@@ -29,7 +29,7 @@ def _free_port() -> int:
 
 
 def _docker(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=90)
+    return subprocess.run(["docker", *args], capture_output=True, text=True, timeout=90, check=False)
 
 
 class Deployment:
@@ -48,7 +48,7 @@ class Deployment:
             cmd += ["-e", f"REDISCLI_AUTH={password}"]
         cmd += [IMAGE, "redis-cli", "-h", "host.docker.internal", "-p", str(self.port),
                 "--user", username or self.username, "--no-auth-warning", *args]
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
 
 
 @pytest.fixture
@@ -77,7 +77,7 @@ def deployment(tmp_path: Path):
     dep = Deployment(name, network, port, username, password)
     try:
         result = subprocess.run(
-            ["bash", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=120,
+            ["bash", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=120, check=False,
         )
         if result.returncode != 0:
             pytest.fail(f"start_redis.sh failed: {result.stderr}")
