@@ -11,8 +11,6 @@ from core.application.validation import validate_inputs
 from core.domain.config import OrcaConfig
 from core.domain.control_authority import ControlAuthority, ControlFunction
 
-from .cycle import ControlCycle
-
 if TYPE_CHECKING:
     from core.application.read_only_planning_cycle import (
         PlanningCyclePort,
@@ -39,13 +37,12 @@ class TaskState(StrEnum):
 
 
 class ControlRuntime:
-    """独立任务顺序执行；首阶段仅实现预检查和空控制循环。"""
+    """独立任务顺序执行；规划任务走规划链，其余任务仅做输入预检查（只读）。"""
 
     def __init__(
         self,
         config: OrcaConfig,
         source: object,
-        cycle: ControlCycle | None = None,
         *,
         reset_control_state: Callable[[str], None] | None = None,
         planning_cycle: PlanningCyclePort | None = None,
@@ -55,7 +52,6 @@ class ControlRuntime:
         self.config = config
         self.control_authority = ControlAuthority()
         self.source = source
-        self.cycle = cycle
         self._reset_control_state = reset_control_state
         if planning_tasks and planning_cycle is None:
             raise ValueError("planning tasks require a planning cycle")
@@ -252,16 +248,6 @@ class ControlRuntime:
                                 self._reset_task_state(task_id)
                                 continue
                         self.reasons.pop(task_id, None)
-                    elif self.cycle is not None:
-                        cycle_reason = await self.cycle.execute(
-                            task_id,
-                            can_write=lambda: self._can_write_task(task_id),
-                        )
-                        if cycle_reason:
-                            self.reasons[task_id] = cycle_reason
-                            self._reset_task_state(task_id)
-                        else:
-                            self.reasons.pop(task_id, None)
                     else:
                         records = await cast(LatestSource, self.source).latest(pairs)
                         errors = validate_inputs(self.config, task_id, records)

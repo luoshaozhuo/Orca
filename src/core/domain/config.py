@@ -207,7 +207,6 @@ class ControlPipelineConfig(ConfigModel):
 
 class ControllerConfig(ConfigModel):
     type: str = Field(min_length=1)
-    strategy: str = Field(min_length=1)
     pipeline: ControlPipelineConfig = Field(default_factory=ControlPipelineConfig)
     enabled: bool = True
     references: tuple[ReferencePolicyConfig, ...] = ()

@@ -71,7 +71,6 @@ def configuration(
         "controllers": {
             "pq": {
                 "type": controller_type,
-                "strategy": "noop",
                 "references": [
                     {
                         "purpose": "ACTIVE_BASE",

@@ -32,7 +32,7 @@ def test_pipeline_configuration_assembles_each_stage() -> None:
 
 def test_controller_without_pipeline_retains_safe_direct_default() -> None:
     config = ControllerConfig.model_validate(
-        {"type": "agc", "strategy": "noop"}
+        {"type": "agc"}
     )
     pipeline = build_control_pipeline(config.pipeline)
     assert isinstance(pipeline.law, DirectControlLaw)

@@ -30,7 +30,6 @@ def config() -> OrcaConfig:
             "controllers": {
                 "agc": {
                     "type": "agc",
-                    "strategy": "noop",
                     "references": [
                         {
                             "purpose": "ACTIVE_BASE",

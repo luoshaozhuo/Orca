@@ -15,7 +15,7 @@ def config() -> OrcaConfig:
             "site": {"site_id": "test"},
             "wind_hub": {"collector": {"target": "127.0.0.1:50051"}},
             "resources": {"device": {"type": "wind"}},
-            "controllers": {"agc": {"type": "agc", "strategy": "noop"}},
+            "controllers": {"agc": {"type": "agc"}},
             "tasks": {
                 "task": {
                     "controller_id": "agc",

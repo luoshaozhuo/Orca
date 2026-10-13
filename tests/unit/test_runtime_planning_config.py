@@ -34,7 +34,6 @@ def configuration(*, planning: dict | None = None) -> dict:
         "controllers": {
             "agc": {
                 "type": "agc",
-                "strategy": "noop",
                 "references": [
                     {
                         "purpose": "ACTIVE_BASE",

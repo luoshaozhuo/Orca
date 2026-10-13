@@ -5,7 +5,6 @@ import asyncio
 import json
 from pathlib import Path
 
-from algorithms.noop import NoOpStrategy
 from core.application.active_power_controller import ActivePowerController
 from core.application.control_coordinator import ControlCoordinator
 from core.application.control_pipeline_factory import (
@@ -37,7 +36,6 @@ from infrastructure.redis.source import RedisSource
 from infrastructure.wind_hub.commander import CommanderClient
 from infrastructure.wind_hub.watchdog import WindHubWatchdog
 
-from .cycle import ControlCycle
 from .runtime import ControlRuntime, TaskState
 
 
@@ -68,9 +66,6 @@ class ControlApplication:
         timeout = config.wind_hub.watchdog.timeout
         self.redis = RedisSource(config.wind_hub.redis, timeout)
         self.commander = CommanderClient(config.wind_hub.commander.target, timeout)
-        if any(controller.enabled and controller.strategy != "noop" for controller in config.controllers.values()):
-            raise ValueError("unsupported strategy: only noop is available before field commissioning")
-        self.cycle = ControlCycle(config, self.redis, self.commander, NoOpStrategy())
         if planning_bindings is None and planning_snapshots is None and not planning_tasks:
             configured = {
                 task_id: (task, task.planning)
@@ -202,7 +197,7 @@ class ControlApplication:
                 },
             )
         self.runtime = ControlRuntime(
-            config, self.redis, self.cycle,
+            config, self.redis,
             reset_control_state=self._reset_control_state,
             planning_cycle=planning_cycle,
             planning_tasks=planning_tasks,

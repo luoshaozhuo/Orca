@@ -26,7 +26,7 @@ def config() -> OrcaConfig:
                     },
                 }
             },
-            "controllers": {"agc": {"type": "agc", "strategy": "noop"}},
+            "controllers": {"agc": {"type": "agc"}},
             "tasks": {
                 "active": {
                     "controller_id": "agc",

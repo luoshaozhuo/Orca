@@ -16,7 +16,7 @@ def make_config() -> OrcaConfig:
             "site": {"site_id": "test"},
             "wind_hub": {"collector": {"target": "127.0.0.1:50051"}},
             "resources": {"d1": {"type": "wind"}},
-            "controllers": {"agc": {"type": "agc", "strategy": "noop"}},
+            "controllers": {"agc": {"type": "agc"}},
             "tasks": {
                 "active": {
                     "controller_id": "agc",
@@ -45,18 +45,17 @@ class FakePlanningCycle:
         self.reset_count += 1
 
 
-class ForbiddenLegacyCycle:
-    async def execute(self, *args: object, **kwargs: object) -> None:
-        raise AssertionError("legacy command path must not execute")
+class ForbiddenSource:
+    async def latest(self, *args: object, **kwargs: object) -> None:
+        raise AssertionError("planning task must not enter the read-only input branch")
 
 
 @pytest.mark.asyncio
-async def test_runtime_planning_never_enters_legacy_commander_path() -> None:
+async def test_runtime_planning_never_enters_read_only_input_branch() -> None:
     planning = FakePlanningCycle()
     runtime = ControlRuntime(
         make_config(),
-        object(),
-        ForbiddenLegacyCycle(),  # type: ignore[arg-type]
+        ForbiddenSource(),
         planning_cycle=planning,
         planning_tasks=frozenset({"active"}),
     )

@@ -160,7 +160,6 @@ def configuration(**task_overrides: object) -> dict:
         "controllers": {
             "agc": {
                 "type": "agc",
-                "strategy": "noop",
                 "pipeline": {"law": {"algorithm": "active_limit"}},
                 "references": [
                     {
