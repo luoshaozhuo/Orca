@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from core.domain.reference import (
     ControlReference,
@@ -14,6 +15,9 @@ from core.domain.reference import (
     select_reference,
 )
 
+if TYPE_CHECKING:
+    from core.domain.config import ControllerConfig
+
 
 ReferenceKey = tuple[ReferencePurpose, str]
 
@@ -21,10 +25,14 @@ ReferenceKey = tuple[ReferencePurpose, str]
 @dataclass(slots=True)
 class ReferenceManager:
     policies: dict[ReferenceKey, ReferenceSelection]
-    _samples: dict[tuple[ReferencePurpose, str, ReferenceSource], ControlReference] = field(
-        default_factory=dict, init=False
+    _samples: dict[
+        tuple[ReferencePurpose, str, ReferenceSource],
+        ControlReference,
+    ] = field(default_factory=dict, init=False)
+    _selected: dict[ReferenceKey, ReferenceSource] = field(
+        default_factory=dict,
+        init=False,
     )
-    _selected: dict[ReferenceKey, ReferenceSource] = field(default_factory=dict, init=False)
 
     def __post_init__(self) -> None:
         for key, policy in self.policies.items():
@@ -33,10 +41,13 @@ class ReferenceManager:
             self._selected[key] = policy.primary
 
     @classmethod
-    def from_controllers(cls, controllers: dict[str, object]) -> ReferenceManager:
+    def from_controllers(
+        cls,
+        controllers: dict[str, ControllerConfig],
+    ) -> ReferenceManager:
         """由已验证的控制器配置建立来源策略；跨控制器的键不可重复。"""
         policies: dict[ReferenceKey, ReferenceSelection] = {}
-        for controller_id, controller in controllers.items():
+        for controller in controllers.values():
             for configured in controller.references:
                 policy = configured.to_selection()
                 key = (policy.purpose, policy.target)
@@ -48,20 +59,37 @@ class ReferenceManager:
         return cls(policies)
 
     def publish(self, sample: ControlReference) -> None:
-        key = (sample.purpose, sample.target)
-        if key not in self.policies:
-            raise ValueError(f"unconfigured reference: {key}")
-        source_key = (*key, sample.source)
-        previous = self._samples.get(source_key)
-        if previous is not None and (
-            sample.generation < previous.generation
-            or (
-                sample.generation == previous.generation
-                and sample.timestamp_ns <= previous.timestamp_ns
-            )
-        ):
-            raise ValueError("out-of-order reference update")
-        self._samples[source_key] = sample
+        """提交单条参考，与批量提交采用相同的顺序和策略校验。"""
+        self.publish_many((sample,))
+
+    def publish_many(self, samples: tuple[ControlReference, ...]) -> None:
+        """整个参考批次校验成功后再替换缓存，拒绝任何部分更新。"""
+        updated = self._samples.copy()
+        for sample in samples:
+            key = (sample.purpose, sample.control.target)
+            policy = self.policies.get(key)
+            if policy is None:
+                raise ValueError(f"unconfigured reference: {key}")
+            if sample.source not in (policy.primary, *policy.backups):
+                raise ValueError(f"reference source not configured: {sample.source}")
+            source_key = (*key, sample.source)
+            previous = updated.get(source_key)
+            if previous is not None and (
+                sample.generation < previous.generation
+                or (
+                    sample.generation == previous.generation
+                    and (
+                        sample.sequence_id < previous.sequence_id
+                        or (
+                            sample.sequence_id == previous.sequence_id
+                            and sample.timestamp_ns <= previous.timestamp_ns
+                        )
+                    )
+                )
+            ):
+                raise ValueError("out-of-order reference update")
+            updated[source_key] = sample
+        self._samples = updated
 
     def select_source(
         self,
@@ -90,7 +118,8 @@ class ReferenceManager:
         key = (purpose, target)
         policy = self.policies[key]
         samples = tuple(
-            sample for source in (policy.primary, *policy.backups)
+            sample
+            for source in (policy.primary, *policy.backups)
             if (sample := self._samples.get((*key, source))) is not None
         )
         return select_reference(

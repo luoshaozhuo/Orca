@@ -1,12 +1,15 @@
-"""控制参考值的类型、来源与确定性仲裁。
-
-只负责参考值语义和选择；控制律与设备指令分配由后续环节执行。
-"""
+"""控制参考值的来源、用途和确定性仲裁。"""
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from enum import StrEnum
+
+from core.domain.control_value import (
+    ControlQuantity,
+    ControlValue,
+    ControlValueKind,
+    ControlValueRole,
+)
 
 
 class ReferenceSource(StrEnum):
@@ -19,16 +22,13 @@ class ReferenceSource(StrEnum):
 
 class ReferencePurpose(StrEnum):
     ACTIVE_BASE = "ACTIVE_BASE"
+    ACTIVE_LIMIT = "ACTIVE_LIMIT"
     REACTIVE_BASE = "REACTIVE_BASE"
     VOLTAGE_BASE = "VOLTAGE_BASE"
+    POWER_FACTOR = "POWER_FACTOR"
     PFR_DELTA = "PFR_DELTA"
     IR_DELTA = "IR_DELTA"
-    REACTIVE_SUPPORT_DELTA = "REACTIVE_SUPPORT_DELTA"
-
-
-class ValueKind(StrEnum):
-    ABSOLUTE = "ABSOLUTE"
-    DELTA = "DELTA"
+    VOLTAGE_SUPPORT_DELTA = "VOLTAGE_SUPPORT_DELTA"
 
 
 class ArbitrationMode(StrEnum):
@@ -36,38 +36,79 @@ class ArbitrationMode(StrEnum):
     PRIMARY_BACKUP = "PRIMARY_BACKUP"
 
 
-_DELTA_PURPOSES = frozenset({
-    ReferencePurpose.PFR_DELTA,
-    ReferencePurpose.IR_DELTA,
-    ReferencePurpose.REACTIVE_SUPPORT_DELTA,
-})
+_PURPOSE_CONTRACT: dict[
+    ReferencePurpose,
+    tuple[ControlQuantity, frozenset[ControlValueKind]],
+] = {
+    ReferencePurpose.ACTIVE_BASE: (
+        ControlQuantity.ACTIVE_POWER,
+        frozenset({ControlValueKind.ABSOLUTE}),
+    ),
+    ReferencePurpose.ACTIVE_LIMIT: (
+        ControlQuantity.ACTIVE_POWER,
+        frozenset({ControlValueKind.UPPER_LIMIT, ControlValueKind.LOWER_LIMIT}),
+    ),
+    ReferencePurpose.REACTIVE_BASE: (
+        ControlQuantity.REACTIVE_POWER,
+        frozenset({ControlValueKind.ABSOLUTE}),
+    ),
+    ReferencePurpose.VOLTAGE_BASE: (
+        ControlQuantity.VOLTAGE,
+        frozenset({ControlValueKind.ABSOLUTE}),
+    ),
+    ReferencePurpose.POWER_FACTOR: (
+        ControlQuantity.POWER_FACTOR,
+        frozenset({ControlValueKind.ABSOLUTE}),
+    ),
+    ReferencePurpose.PFR_DELTA: (
+        ControlQuantity.ACTIVE_POWER,
+        frozenset({ControlValueKind.DELTA}),
+    ),
+    ReferencePurpose.IR_DELTA: (
+        ControlQuantity.ACTIVE_POWER,
+        frozenset({ControlValueKind.DELTA}),
+    ),
+    ReferencePurpose.VOLTAGE_SUPPORT_DELTA: (
+        ControlQuantity.REACTIVE_POWER,
+        frozenset({ControlValueKind.DELTA}),
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
 class ControlReference:
+    """参考用途与统一控制量的组合，不重复建模物理语义。"""
+
     purpose: ReferencePurpose
     source: ReferenceSource
-    target: str
-    kind: ValueKind
-    value: float
+    control: ControlValue
     timestamp_ns: int
     valid_until_ns: int
     generation: int
+    sequence_id: int = 0
+    event_id: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.target:
-            raise ValueError("reference target is required")
-        if isinstance(self.value, bool) or not math.isfinite(self.value):
-            raise ValueError("reference value must be finite")
+        if self.control.role != ControlValueRole.REFERENCE:
+            raise ValueError("reference control value must have REFERENCE role")
+        expected_quantity, allowed_kinds = _PURPOSE_CONTRACT[self.purpose]
+        if self.control.quantity != expected_quantity:
+            raise ValueError(
+                f"{self.purpose}: expected quantity {expected_quantity}"
+            )
+        if self.control.kind not in allowed_kinds:
+            allowed = ", ".join(sorted(item.value for item in allowed_kinds))
+            raise ValueError(f"{self.purpose}: expected kind {allowed}")
         if self.timestamp_ns < 0 or self.valid_until_ns <= self.timestamp_ns:
             raise ValueError("invalid reference time interval")
-        if self.generation < 0:
-            raise ValueError("reference generation must be nonnegative")
-        required_kind = (
-            ValueKind.DELTA if self.purpose in _DELTA_PURPOSES else ValueKind.ABSOLUTE
-        )
-        if self.kind != required_kind:
-            raise ValueError(f"{self.purpose}: expected {required_kind} reference")
+        if self.generation < 0 or self.sequence_id < 0:
+            raise ValueError("reference generation and sequence must be nonnegative")
+        if self.event_id is not None and not self.event_id:
+            raise ValueError("event_id cannot be empty")
+
+    @property
+    def target(self) -> str:
+        return self.control.target
 
     def is_valid_at(self, now_ns: int) -> bool:
         return self.timestamp_ns <= now_ns < self.valid_until_ns
@@ -98,12 +139,11 @@ def select_reference(
     authorized_sources: frozenset[ReferenceSource],
     confirmed_source: ReferenceSource | None = None,
 ) -> ControlReference | None:
-    """根据已授权来源选择有效参考。
-
-    主备切换必须经过外部控制权管理器确认，禁止自动隐式回退。
-    """
-    allowed = (policy.primary,) if policy.mode == ArbitrationMode.FIXED else (
-        policy.primary, *policy.backups
+    """根据显式授权和已确认来源选择当前有效参考。"""
+    allowed = (
+        (policy.primary,)
+        if policy.mode == ArbitrationMode.FIXED
+        else (policy.primary, *policy.backups)
     )
     by_source: dict[ReferenceSource, ControlReference] = {}
     for candidate in candidates:
@@ -115,7 +155,6 @@ def select_reference(
             raise ValueError(f"multiple active references from {candidate.source}")
         by_source[candidate.source] = candidate
 
-    # 已确认切到备用来源后，不得因主源恢复而在同一周期隐式切回。
     selected = confirmed_source if confirmed_source is not None else policy.primary
     if selected not in allowed or selected not in authorized_sources:
         return None

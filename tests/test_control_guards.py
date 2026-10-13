@@ -67,6 +67,7 @@ def test_same_physical_point_cannot_receive_two_commands():
 
 def test_nonfinite_bound_rejected():
     from pydantic import ValidationError
+
     from core.domain.config import OutputConfig
 
     with pytest.raises(ValidationError):

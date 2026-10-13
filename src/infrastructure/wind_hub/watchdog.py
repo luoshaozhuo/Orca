@@ -5,8 +5,8 @@ import asyncio
 import logging
 from typing import Protocol
 
-from core.domain.config import OrcaConfig
 from control.runtime import ControlRuntime
+from core.domain.config import OrcaConfig
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class WindHubWatchdog:
             self.redis_ok = True
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception:  # noqa: BLE001 - probe/connection boundary
             self.runtime.ready = False
             self.redis_ok = False
             try:
@@ -78,7 +78,7 @@ class WindHubWatchdog:
                 self.redis_ok = True
             except asyncio.CancelledError:
                 raise
-            except Exception as retry_exc:
+            except Exception as retry_exc:  # noqa: BLE001 - reconnection boundary
                 self.last_error = f"Redis: {retry_exc}"
                 logger.warning("Redis unavailable: %s", retry_exc)
 
@@ -94,7 +94,7 @@ class WindHubWatchdog:
                 self._revision = revision
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception:  # noqa: BLE001 - probe/connection boundary
             self.commander_ok = False
             self.point_mappings_ok = False
             self.runtime.ready = False
@@ -108,7 +108,7 @@ class WindHubWatchdog:
                 self._revision = revision
             except asyncio.CancelledError:
                 raise
-            except Exception as retry_exc:
+            except Exception as retry_exc:  # noqa: BLE001 - reconnection boundary
                 self.last_error = f"Commander/mappings: {retry_exc}"
                 logger.warning("Commander unavailable or mappings invalid: %s", retry_exc)
 

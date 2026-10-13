@@ -152,7 +152,7 @@ def sandbox(tmp_path: Path):
 def run_script(env: dict[str, str], **extra: str) -> subprocess.CompletedProcess[str]:
     merged = {**env, **extra}
     return subprocess.run(
-        ["bash", str(SCRIPT)], env=merged, capture_output=True, text=True, timeout=90,
+        ["bash", str(SCRIPT)], check=False, env=merged, capture_output=True, text=True, timeout=90,
     )
 
 
@@ -292,8 +292,7 @@ def test_foreign_container_rejected(sandbox: dict[str, str]) -> None:
     containers = state_dir(sandbox) / "containers"
     containers.mkdir(parents=True)
     container_file(sandbox).write_text(
-        "MANAGED=false\nMAPPED=127.0.0.1:%s\nMOUNTS=\nRUNNING=true\nACLFILE=\n"
-        % sandbox["REDIS_HOST_PORT"]
+        f"MANAGED=false\nMAPPED=127.0.0.1:{sandbox['REDIS_HOST_PORT']}\nMOUNTS=\nRUNNING=true\nACLFILE=\n"
     )
     result = run_script(sandbox)
     assert result.returncode != 0

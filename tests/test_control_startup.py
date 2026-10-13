@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from infrastructure.config.yaml import load_config
 from control.runtime import ControlRuntime
 from core.application.validation import validate_inputs
+from infrastructure.config.yaml import load_config
 from infrastructure.wind_hub.watchdog import WindHubWatchdog
 
 CONFIG = Path(__file__).resolve().parents[1] / "configs"

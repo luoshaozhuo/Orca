@@ -5,10 +5,20 @@ import pytest
 
 from core.domain.control_value import (
     ControlQuantity as Q,
+)
+from core.domain.control_value import (
     ControlScope as S,
+)
+from core.domain.control_value import (
     ControlValue as V,
+)
+from core.domain.control_value import (
     ControlValueKind as K,
+)
+from core.domain.control_value import (
     ControlValueRole as R,
+)
+from core.domain.control_value import (
     combine_power_references,
 )
 

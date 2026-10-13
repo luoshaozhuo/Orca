@@ -1,8 +1,23 @@
+# 控制算法示例：仅装配候选计算管线，不自动开放设备写入。
+# signal.algorithm: passthrough | low_pass (low_pass 必填 tau_s > 0)
+# trajectory.algorithm: passthrough | ramp (ramp 必填 up_per_s、down_per_s >= 0)
+# law.algorithm: direct | p | pi
+#   direct: 无额外参数；p: kp；pi: kp、ki，kaw 可选。
+# kp、ki、kaw 均为非负有限数；增益单位及采样周期须与现场整定一致。
+# ramp 限速单位为参考值单位/秒，首次运行前必须用可信实际输出初始化。
+# 当前 strategy: noop 仍为唯一允许投入的运行策略。
 controllers:
   agc:
     type: agc
     strategy: noop
     enabled: true
+    pipeline:
+      signal:
+        algorithm: passthrough
+      trajectory:
+        algorithm: passthrough
+      law:
+        algorithm: direct
     references:
       - purpose: ACTIVE_BASE
         target: POI

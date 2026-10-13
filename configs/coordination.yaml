@@ -1,0 +1,66 @@
+# ================================================================
+# Orca Controller 有功控制需求协调
+# ================================================================
+# priority:
+#   数字越小优先级越高；同优先级不等于自动求和。
+#
+# algorithm:
+#   default | sum | priority | exclusive | directional
+#
+# default:
+#   - ir 有效且 ir_override=true：采用 ir，抑制 pfr/agc。
+#   - 否则 pfr 有效：pfr 与 agc 同向时加权叠加；
+#     反向或任一为零时保留 pfr。
+#   - 否则仅 agc 生效。
+#   parameters:
+#     weights: agc/pfr/ir 非负有限权重，默认 1.0，不归一化。
+#     pfr_agc_mode: same_direction_add
+#     ir_override: true | false，默认 true。
+#
+# sum:
+#   按 weights 对全部有效需求进行有符号代数求和。
+#   parameters:
+#     weights: 非负有限权重；缺省 1.0；0 表示不产生数值贡献。
+#
+# priority:
+#   只采纳最高优先级需求。
+#   parameters:
+#     tie_break: reject | sum | fixed_order，默认 reject。
+#     order: tie_break=fixed_order 时必须列出参与功能的完整顺序。
+#
+# exclusive:
+#   仅保留一个需求。
+#   parameters:
+#     select: highest_priority | fixed_order，默认 highest_priority。
+#     order: select=fixed_order 时必须列出参与功能的完整顺序。
+#
+# directional:
+#   根据有效非零增量方向处理。
+#   parameters:
+#     weights: 同 sum。
+#     same_direction: sum | priority，默认 sum。
+#     opposite_direction: sum | priority | suppress，默认 sum。
+#     dominant: opposite_direction=suppress 时必填。
+#
+# rules:
+#   match 为精确功能集合；仅当前有效功能集合完全相同时命中。
+#   重复 match、未知参数、非法权重及不完整 fixed_order 均拒绝加载。
+#
+# 输入必须先统一计量口径、符号方向、单位和功率基准；
+# 重复的设备本地响应必须在进入协调器前剔除。
+# ================================================================
+coordination:
+  active_power:
+    algorithm: default
+    priority:
+      ir: 1
+      pfr: 2
+      agc: 3
+    parameters:
+      weights:
+        ir: 1.0
+        pfr: 1.0
+        agc: 1.0
+      pfr_agc_mode: same_direction_add
+      ir_override: true
+    rules: []

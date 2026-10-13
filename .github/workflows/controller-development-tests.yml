@@ -1,0 +1,36 @@
+name: Controller development tests
+on:
+  push:
+    branches:
+      - feat/controller-v0-11-coordination
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controller-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install project and tooling
+        run: python -m pip install -e ".[dev]"
+      - name: Static lint
+        run: python -m ruff check --exclude src/infrastructure/wind_hub/rpc src tests
+      - name: Type check control execution boundary
+        run: python -m mypy --follow-imports=silent --ignore-missing-imports src/control/runtime.py src/core/application/safe_plan_dispatcher.py src/core/application/read_only_planning_cycle.py src/core/domain/safe_dispatch.py
+      - name: Syntax compilation
+        run: python -m compileall -q src tests
+      - name: Targeted controller unit tests
+        run: |
+          python -m pytest -q tests/test_control_laws.py tests/test_control_pipeline.py tests/test_control_pipeline_factory.py tests/test_control_coordinator.py tests/test_coordination_config.py tests/test_power_allocator.py tests/test_device_capability.py tests/test_joint_power_allocator.py tests/test_joint_plant_allocator.py tests/test_active_power_planner.py tests/test_active_power_controller.py tests/test_active_power_reference.py tests/test_redis_planning_snapshot.py tests/test_runtime_planning.py tests/test_runtime_planning_config.py tests/test_read_only_planning_cycle.py tests/test_application_planning.py tests/test_safe_plan_dispatcher.py tests/test_dispatch_mapping.py tests/test_control_runtime_state.py
+      - name: Start managed Redis for integration tests
+        env:
+          REDIS_BIND_IP: 127.0.0.1
+        run: bash scripts/start_redis.sh
+      - name: Full repository pytest regression
+        run: python -m pytest -q tests
