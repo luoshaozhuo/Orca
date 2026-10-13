@@ -8,7 +8,10 @@ from pathlib import Path
 from algorithms.noop import NoOpStrategy
 from core.application.active_power_controller import ActivePowerController
 from core.application.control_coordinator import ControlCoordinator
-from core.application.control_pipeline_factory import build_control_pipeline
+from core.application.control_pipeline_factory import (
+    build_control_pipeline,
+    build_reactive_controller,
+)
 from core.application.dispatch_mapping import validate_dispatch_bindings
 from core.application.internal_reference import InternalReferenceService
 from core.application.joint_power_allocator import JointPowerAllocator
@@ -26,6 +29,7 @@ from infrastructure.redis.planning_snapshot import (
     ActivePlanningBinding,
     DevicePlanningBinding,
     PlanningReferenceBinding,
+    ReactivePlanningBinding,
     RedisPlanningSnapshotSource,
     StoragePlanningBinding,
 )
@@ -74,6 +78,37 @@ class ControlApplication:
                 if task.enabled and task.planning is not None
             }
             planning_tasks = frozenset(configured)
+
+            def _reference_bindings(
+                references: tuple,
+            ) -> tuple[PlanningReferenceBinding, ...]:
+                return tuple(
+                    PlanningReferenceBinding(
+                        purpose=reference.purpose,
+                        source=reference.source,
+                        resource_id=reference.resource_id,
+                        point_id=reference.point_id,
+                        valid_for_ns=int(reference.valid_for_s * 1e9),
+                    )
+                    for reference in references
+                )
+
+            def _reactive_binding(task_id: str) -> ReactivePlanningBinding | None:
+                plan = config.tasks[task_id].reactive_planning
+                if plan is None:
+                    return None
+                return ReactivePlanningBinding(
+                    target=plan.target,
+                    mode=plan.mode,
+                    poi_device_id=plan.poi_device_id,
+                    poi_reactive_point=plan.poi_reactive_point,
+                    minimum=plan.minimum,
+                    maximum=plan.maximum,
+                    authorized_sources=frozenset(plan.authorized_sources),
+                    poi_voltage_point=plan.poi_voltage_point,
+                    reference_inputs=_reference_bindings(plan.reference_inputs),
+                )
+
             planning_bindings = {
                 task_id: ActivePlanningBinding(
                     target=plan.target,
@@ -84,17 +119,9 @@ class ControlApplication:
                     dt_s=task.interval,
                     authorized_sources=frozenset(plan.authorized_sources),
                     active_functions=frozenset(plan.active_functions),
-                    reference_inputs=tuple(
-                        PlanningReferenceBinding(
-                            purpose=reference.purpose,
-                            source=reference.source,
-                            resource_id=reference.resource_id,
-                            point_id=reference.point_id,
-                            valid_for_ns=int(reference.valid_for_s * 1e9),
-                        )
-                        for reference in plan.reference_inputs
-                    ),
+                    reference_inputs=_reference_bindings(plan.reference_inputs),
                     maximum_skew_ns=plan.maximum_skew_ns,
+                    reactive=_reactive_binding(task_id),
                     devices=tuple(
                         DevicePlanningBinding(
                             device_id=device.device_id,
@@ -160,6 +187,16 @@ class ControlApplication:
                 JointPowerAllocator(),
                 maximum_age_ns=int(config.wind_hub.watchdog.interval * 1e9),
                 permitted=self._can_publish_plan,
+                reactive_controllers={
+                    task_id: build_reactive_controller(
+                        plan.mode,
+                        config.controllers[
+                            config.tasks[task_id].controller_id
+                        ].pipeline,
+                    )
+                    for task_id in planning_tasks
+                    if (plan := config.tasks[task_id].reactive_planning) is not None
+                },
             )
         self.runtime = ControlRuntime(
             config, self.redis, self.cycle,
@@ -179,7 +216,10 @@ class ControlApplication:
             task_id in self.config.tasks
             and self.runtime.ready
             and self.runtime.states[task_id] == "RUNNING"
-            and self.runtime.control_authority.can_output(ControlFunction.AGC)
+            and all(
+                self.runtime.control_authority.can_output(function)
+                for function in self.runtime.task_functions(task_id)
+            )
         )
 
     def _can_contribute(
@@ -270,6 +310,12 @@ class ControlApplication:
                 task_id,
                 ActivePowerController(updated, self.active_power_coordinator),
             )
+            reactive_plan = self.config.tasks[task_id].reactive_planning
+            if reactive_plan is not None:
+                planning.replace_reactive_controller(
+                    task_id,
+                    build_reactive_controller(reactive_plan.mode, config),
+                )
 
     async def start(self) -> None:
         if self._socket.exists():
@@ -316,7 +362,10 @@ class ControlApplication:
                 }
                 for task_id, result in self.runtime.planning_results.items()
                 if self.runtime.ready and self.runtime.states[task_id] == "RUNNING"
-                and self.runtime.control_authority.can_output(ControlFunction.AGC)
+                and all(
+                    self.runtime.control_authority.can_output(function)
+                    for function in self.runtime.task_functions(task_id)
+                )
             },
             "authority_mode": self.runtime.control_authority.mode.value,
             "control_functions": {

@@ -13,7 +13,10 @@ from core.domain.control_authority import ControlAuthority, ControlFunction
 from .cycle import ControlCycle
 
 if TYPE_CHECKING:
-    from core.application.read_only_planning_cycle import PlanningCyclePort
+    from core.application.read_only_planning_cycle import (
+        PlanningCyclePort,
+        PlanningCycleResult,
+    )
     from core.application.safe_plan_dispatcher import SafePlanDispatcher
 
 class LatestSource(Protocol):
@@ -55,7 +58,7 @@ class ControlRuntime:
         self._dispatcher = dispatcher
         self.dispatch_blocked: dict[str, str] = {}
         self._inflight_dispatch: set[str] = set()
-        self.planning_results: dict[str, object] = {}
+        self.planning_results: dict[str, PlanningCycleResult] = {}
         self.write_enabled = False  # 现场写权限未验证；生产装配不得自动放开
         self.states = {name: "STOPPED" for name in config.tasks}
         self.reasons: dict[str, str] = {}
@@ -63,20 +66,29 @@ class ControlRuntime:
         self.ready = False
         self._authority: dict[tuple[str, str], str] = {}
 
-    def _function_for(self, task_id: str) -> ControlFunction | None:
-        controller = self.config.controllers[self.config.tasks[task_id].controller_id]
-        try:
-            return ControlFunction(controller.type.upper())
-        except ValueError:
-            return None
+    def task_functions(self, task_id: str) -> frozenset[ControlFunction]:
+        """任务投运所需全部控制功能；规划任务由 P/Q 配置决定。"""
+        task = self.config.tasks[task_id]
+        functions: set[ControlFunction] = set()
+        if task.planning is not None:
+            functions.add(ControlFunction.AGC)
+        if task.reactive_planning is not None:
+            functions.add(ControlFunction.AVC)
+        if not functions:
+            controller = self.config.controllers[task.controller_id]
+            try:
+                functions.add(ControlFunction(controller.type.upper()))
+            except ValueError:
+                pass
+        return frozenset(functions)
 
     def _can_write_task(self, task_id: str) -> bool:
-        function = self._function_for(task_id)
+        functions = self.task_functions(task_id)
         return (
             self.write_enabled
             and self.ready
-            and function is not None
-            and self.control_authority.can_output(function)
+            and bool(functions)
+            and all(self.control_authority.can_output(f) for f in functions)
             and self.states[task_id] == "RUNNING"
             and task_id not in self.dispatch_blocked
         )

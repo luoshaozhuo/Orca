@@ -5,6 +5,7 @@ import math
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from core.domain.avc import MODE_PURPOSE, AvcMode
 from core.domain.coordination import (
     CoordinationAlgorithm,
     CoordinationFunction,
@@ -296,12 +297,7 @@ class PlanningReferenceConfig(ConfigModel):
 
     @model_validator(mode="after")
     def validate_reference(self) -> PlanningReferenceConfig:
-        if self.purpose not in (
-            ReferencePurpose.ACTIVE_BASE,
-            ReferencePurpose.PFR_DELTA,
-            ReferencePurpose.IR_DELTA,
-        ):
-            raise ValueError("unsupported planning reference purpose")
+        # 用途白名单由所属规划上下文校验：有功与无功规划各自限定允许用途。
         if not math.isfinite(self.valid_for_s):
             raise ValueError("planning reference lifetime must be finite")
         return self
@@ -333,6 +329,13 @@ class ActivePlanningConfig(ConfigModel):
         reference_keys = [(item.purpose, item.source) for item in self.reference_inputs]
         if len(reference_keys) != len(set(reference_keys)):
             raise ValueError("duplicate planning reference input")
+        allowed_purposes = {
+            ReferencePurpose.ACTIVE_BASE,
+            ReferencePurpose.PFR_DELTA,
+            ReferencePurpose.IR_DELTA,
+        }
+        if any(item.purpose not in allowed_purposes for item in self.reference_inputs):
+            raise ValueError("unsupported planning reference purpose")
         if any(item.source not in self.authorized_sources for item in self.reference_inputs):
             raise ValueError("planning reference input source is not authorized")
         if len(self.active_functions) != len(set(self.active_functions)):
@@ -342,12 +345,65 @@ class ActivePlanningConfig(ConfigModel):
         return self
 
 
+class ReactivePlanningConfig(ConfigModel):
+    """AVC 无功规划：设备能力复用同任务有功规划的设备集合。"""
+
+    target: str = Field(min_length=1)
+    mode: AvcMode
+    poi_device_id: str = Field(min_length=1)
+    poi_reactive_point: str = Field(min_length=1)
+    poi_voltage_point: str | None = None
+    minimum: float
+    maximum: float
+    authorized_sources: tuple[ReferenceSource, ...] = Field(min_length=1)
+    reference_inputs: tuple[PlanningReferenceConfig, ...] = ()
+    maximum_skew_ns: int = Field(default=500_000_000, gt=0)
+
+    @model_validator(mode="after")
+    def validate_bindings(self) -> ReactivePlanningConfig:
+        if not math.isfinite(self.minimum) or not math.isfinite(self.maximum):
+            raise ValueError("reactive planning limits must be finite")
+        if self.minimum > self.maximum:
+            raise ValueError("reactive planning limits are inverted")
+        if len(self.authorized_sources) != len(set(self.authorized_sources)):
+            raise ValueError("duplicate reactive planning reference source")
+        allowed = {
+            ReferencePurpose.REACTIVE_BASE,
+            ReferencePurpose.VOLTAGE_BASE,
+            ReferencePurpose.POWER_FACTOR,
+        }
+        keys = [(item.purpose, item.source) for item in self.reference_inputs]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate reactive planning reference input")
+        for reference in self.reference_inputs:
+            if reference.purpose not in allowed:
+                raise ValueError("unsupported reactive planning reference purpose")
+            if reference.source not in self.authorized_sources:
+                raise ValueError("reactive planning reference source is not authorized")
+        required = MODE_PURPOSE[self.mode]
+        if not any(item.purpose == required for item in self.reference_inputs):
+            raise ValueError(f"{self.mode}: missing {required.value} reference input")
+        if self.mode == AvcMode.VOLTAGE and self.poi_voltage_point is None:
+            raise ValueError("VOLTAGE mode requires a POI voltage measurement")
+        if self.mode != AvcMode.VOLTAGE and self.poi_voltage_point is not None:
+            raise ValueError("voltage measurement is only used in VOLTAGE mode")
+        return self
+
+
 class TaskConfig(ConfigModel):
     controller_id: str
     planning: ActivePlanningConfig | None = None
+    reactive_planning: ReactivePlanningConfig | None = None
     interval: float = Field(gt=0)
     enabled: bool = True
     resource_ids: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_planning_pair(self) -> TaskConfig:
+        # 无功规划复用有功规划的设备能力集合；纯无功任务尚无设备来源，暂不支持。
+        if self.reactive_planning is not None and self.planning is None:
+            raise ValueError("reactive planning requires the active planning device set")
+        return self
 
 
 class CoordinationParametersConfig(ConfigModel):
@@ -522,8 +578,10 @@ class OrcaConfig(ConfigModel):
             if task.enabled and not self.controllers[task.controller_id].enabled:
                 raise ValueError(f"task {name}: controller disabled")
             if task.planning is not None:
-                if self.controllers[task.controller_id].type.lower() != "agc":
-                    raise ValueError(f"task {name}: active planning requires AGC controller")
+                controller_type = self.controllers[task.controller_id].type.lower()
+                expected = "pq" if task.reactive_planning is not None else "agc"
+                if controller_type != expected:
+                    raise ValueError(f"task {name}: planning requires {expected} controller")
                 for device in task.planning.devices:
                     if device.device_id not in task.resource_ids:
                         raise ValueError(
@@ -555,6 +613,25 @@ class OrcaConfig(ConfigModel):
                         point.point_id for point in resource.inputs.values()
                     }:
                         raise ValueError(f"task {name}: reference measurement not registered")
+            if task.reactive_planning is not None:
+                plan = task.reactive_planning
+                if plan.poi_device_id not in self.resources:
+                    raise ValueError(f"task {name}: reactive POI resource is not configured")
+                poi = self.resources[plan.poi_device_id]
+                registered = {point.point_id for point in poi.inputs.values()}
+                required = {plan.poi_reactive_point}
+                if plan.poi_voltage_point is not None:
+                    required.add(plan.poi_voltage_point)
+                if not required <= registered:
+                    raise ValueError(f"task {name}: reactive POI measurement not registered")
+                for reference in plan.reference_inputs:
+                    if reference.resource_id not in self.resources:
+                        raise ValueError(f"task {name}: reactive reference resource not registered")
+                    resource = self.resources[reference.resource_id]
+                    if reference.point_id not in {
+                        point.point_id for point in resource.inputs.values()
+                    }:
+                        raise ValueError(f"task {name}: reactive reference measurement not registered")
             for resource_id in task.resource_ids:
                 if resource_id not in self.resources:
                     raise ValueError(f"task {name}: unknown resource {resource_id}")

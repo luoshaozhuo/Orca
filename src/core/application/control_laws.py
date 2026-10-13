@@ -131,3 +131,55 @@ class PIControlLaw:
         self._previous_error = None
         self._previous_unsaturated = None
         self._previous_saturated = False
+
+
+@dataclass(slots=True)
+class VoltageReactiveLaw:
+    """AVC 定电压模式：电压偏差经 PI 产生无功修正量。
+
+    输出为并网点无功绝对候选值（Mvar），在当前无功实测基础上叠加
+    比例与积分修正；积分在饱和方向上冻结，替代缺失的可实现输出回算。
+    增益单位为 Mvar/kV 与 Mvar/(kV·s)，符号约定：电压低于参考时
+    产生正无功（向电网注入）。
+    """
+
+    kp: float
+    ki: float
+    _integral: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.kp) or not math.isfinite(self.ki):
+            raise ValueError("voltage law gains must be finite")
+        if self.kp < 0 or self.ki < 0:
+            raise ValueError("voltage law gains must be nonnegative")
+
+    def calculate(
+        self,
+        u_ref: float,
+        u_meas: float,
+        q_meas: float,
+        dt_s: float,
+        minimum: float,
+        maximum: float,
+    ) -> float:
+        """返回限幅后的无功候选值；任何非有限输入均拒绝。"""
+        values = (u_ref, u_meas, q_meas, dt_s, minimum, maximum)
+        if any(not math.isfinite(item) for item in values):
+            raise ValueError("voltage law inputs must be finite")
+        if dt_s <= 0 or minimum > maximum:
+            raise ValueError("invalid voltage law sample period or limits")
+        error = u_ref - u_meas
+        proposed = self._integral + self.ki * dt_s * error
+        if not math.isfinite(proposed):
+            raise ValueError("voltage law integral overflow")
+        raw = q_meas + self.kp * error + proposed
+        if (raw > maximum and proposed > self._integral) or (
+            raw < minimum and proposed < self._integral
+        ):
+            proposed = self._integral
+        self._integral = proposed
+        output = q_meas + self.kp * error + self._integral
+        return max(minimum, min(maximum, output))
+
+    def reset(self) -> None:
+        self._integral = 0.0
