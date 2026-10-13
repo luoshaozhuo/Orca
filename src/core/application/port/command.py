@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from core.domain.decision import Setpoint
 
 
 class CommandPort(Protocol):
