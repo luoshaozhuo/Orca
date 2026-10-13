@@ -1,7 +1,7 @@
 """场站有功控制计算编排：参考选择、控制律、功能协调。"""
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from core.application.control_coordinator import ControlCoordinator
 from core.application.control_pipeline import ControlPipeline
@@ -14,7 +14,6 @@ from core.domain.control_value import (
 from core.domain.coordination import (
     ControlDemand,
     CoordinationContext,
-    CoordinationFunction,
     CoordinationResult,
 )
 
