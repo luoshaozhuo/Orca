@@ -66,6 +66,15 @@ class ControlApplication:
             "tasks": self.runtime.states.copy(),
             "output_owners": {f"{device}/{point}": owner for (device, point), owner in self.runtime._authority.items()},
             "task_reasons": self.runtime.reasons.copy(),
+            "authority_mode": self.runtime.control_authority.mode.value,
+            "control_functions": {
+                function.value: {
+                    "service": self.runtime.control_authority.functions[function].value,
+                    "blocked": sorted(self.runtime.control_authority.blocks[function]),
+                    "can_output": self.runtime.control_authority.can_output(function),
+                }
+                for function in self.runtime.control_authority.functions
+            },
         }
 
     async def _handle(
