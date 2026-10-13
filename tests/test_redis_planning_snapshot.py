@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from dataclasses import replace
 
 import pytest
 
@@ -17,6 +18,7 @@ from core.domain.device_capability import DeviceTechnology
 from infrastructure.redis.planning_snapshot import (
     ActivePlanningBinding, DevicePlanningBinding, RedisPlanningSnapshotSource,
     StoragePlanningBinding,
+    PlanningReferenceBinding,
 )
 
 
@@ -154,8 +156,6 @@ async def test_reference_generation_mismatch_blocks_snapshot() -> None:
 
 @pytest.mark.asyncio
 async def test_storage_soc_and_ramp_constraints_are_in_snapshot() -> None:
-    from dataclasses import replace
-
     records = values()
     records[("wtg", "p")]["value"] = 0.0
     records[("wtg", "soc")] = {
@@ -207,4 +207,57 @@ async def test_missing_soc_measurement_blocks_storage_snapshot() -> None:
         generation=7, maximum_age_ns=2_000_000_000,
     )
     with pytest.raises(ValueError, match="missing measurement"):
+        await provider.acquire("active")
+
+
+@pytest.mark.asyncio
+async def test_redis_reference_is_published_and_repeated_sample_is_idempotent() -> None:
+    records = values()
+    records[("grid", "setpoint")] = {
+        "value": 7.0,
+        "quality": "good",
+        "timestamp": records[("poi", "p")]["timestamp"],
+    }
+    original = bindings()["active"]
+    external = PlanningReferenceBinding(
+        purpose=ReferencePurpose.ACTIVE_BASE,
+        source=ReferenceSource.GRID,
+        resource_id="grid",
+        point_id="setpoint",
+        valid_for_ns=2_000_000_000,
+    )
+    provider = RedisPlanningSnapshotSource(
+        MockMeasurements(records),
+        references(),
+        {"active": replace(original, reference_inputs=(external,))},
+        generation=7, maximum_age_ns=2_000_000_000,
+        can_plan=lambda task, device, quantity: True,
+    )
+    first = await provider.acquire("active")
+    second = await provider.acquire("active")
+    assert first.active.base.value == pytest.approx(7.0)
+    assert second.active.base.value == pytest.approx(7.0)
+
+
+@pytest.mark.asyncio
+async def test_expired_external_reference_is_rejected() -> None:
+    records = values()
+    records[("grid", "setpoint")] = {
+        "value": 6.0, "quality": "good",
+        "timestamp": (
+            datetime.now(UTC) - timedelta(seconds=10)
+        ).isoformat(),
+    }
+    external = PlanningReferenceBinding(
+        ReferencePurpose.ACTIVE_BASE,
+        ReferenceSource.GRID,
+        "grid", "setpoint",
+        valid_for_ns=1_000_000_000,
+    )
+    provider = RedisPlanningSnapshotSource(
+        MockMeasurements(records), references(),
+        {"active": replace(bindings()["active"], reference_inputs=(external,))},
+        generation=7, maximum_age_ns=2_000_000_000,
+    )
+    with pytest.raises(ValueError, match="stale"):
         await provider.acquire("active")
