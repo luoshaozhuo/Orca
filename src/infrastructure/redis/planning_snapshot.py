@@ -197,6 +197,7 @@ class RedisPlanningSnapshotSource:
             timestamps.append(timestamp_ns)
         if max(timestamps) - min(timestamps) > binding.maximum_skew_ns:
             raise ValueError("planning measurements have excessive time skew")
+        pending: list[tuple[tuple[str, ReferencePurpose, ReferenceSource], ControlReference]] = []
         for reference in binding.reference_inputs:
             key = (reference.resource_id, reference.point_id)
             raw = records.get(key)
@@ -231,8 +232,10 @@ class RedisPlanningSnapshotSource:
                 generation=self._generation,
                 sequence_id=stamp_ns,
             )
-            self._references.publish(sample)
-            self._last_reference[sample_key] = (stamp_ns, number)
+            pending.append((sample_key, sample))
+        self._references.publish_many(tuple(sample for _, sample in pending))
+        for key, sample in pending:
+            self._last_reference[key] = (sample.timestamp_ns, sample.control.value)
 
         poi = ControlValue(
             ControlQuantity.ACTIVE_POWER, ControlScope.POI, binding.target,
