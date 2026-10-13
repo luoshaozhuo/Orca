@@ -79,7 +79,9 @@ def make_service(
     }
     manager = ReferenceManager(policies)
     authority = ControlAuthority()
+    authority.request_in_service(ControlFunction.PFR, operator="test")
     authority.put_in_service(ControlFunction.PFR, authorized=True)
+    authority.request_in_service(ControlFunction.IR, operator="test")
     authority.put_in_service(ControlFunction.IR, authorized=True)
     source = FakeSource()
     service = FrequencyResponseService(
@@ -319,6 +321,7 @@ async def test_authority_revocation_exits_event_and_stops_contribution() -> None
     sample = manager._samples[(ReferencePurpose.PFR_DELTA, "POI", INTERNAL)]
     assert sample.timestamp_ns == t0  # 撤销后不再发布
     # 重新投入后新扰动生成新事件，控制权撤销前的旧事件不得沿用。
+    authority.request_in_service(ControlFunction.PFR, operator="test")
     authority.put_in_service(ControlFunction.PFR, authorized=True)
     source.set("poi", "FREQ", 49.80, t0 + 2 * SECOND)
     await service.update(t0 + 2 * SECOND)

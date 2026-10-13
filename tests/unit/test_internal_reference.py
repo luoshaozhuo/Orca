@@ -41,6 +41,7 @@ def test_internal_pfr_requires_function_service_and_unblocked() -> None:
         item.pfr(49.9, parameters, **arguments)
     assert not item.manager._samples
 
+    item.authority.request_in_service(ControlFunction.PFR, operator="test")
     item.authority.put_in_service(ControlFunction.PFR, authorized=True)
     reference = item.pfr(49.9, parameters, **arguments)
     assert reference.control.value == pytest.approx(5.0)
@@ -71,6 +72,7 @@ def test_internal_pfr_requires_function_service_and_unblocked() -> None:
 
 def test_unconfigured_internal_inertia_rejected() -> None:
     item = service()
+    item.authority.request_in_service(ControlFunction.IR, operator="test")
     item.authority.put_in_service(ControlFunction.IR, authorized=True)
     with pytest.raises(ValueError, match="not configured"):
         item.inertia(

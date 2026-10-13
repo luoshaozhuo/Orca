@@ -184,8 +184,11 @@ async def assemble(redis_config, data_publisher: DataPublisher, *, ir: bool):
     await source.connect()
     manager = manager_with_internal(ir=ir)
     authority = ControlAuthority()
+    authority.request_in_service(ControlFunction.AGC, operator="test")
     authority.put_in_service(ControlFunction.AGC, authorized=True)
+    authority.request_in_service(ControlFunction.PFR, operator="test")
     authority.put_in_service(ControlFunction.PFR, authorized=True)
+    authority.request_in_service(ControlFunction.IR, operator="test")
     authority.put_in_service(ControlFunction.IR, authorized=True)
     service = make_service(manager, authority, source, ir=ir)
     snapshot_source = RedisPlanningSnapshotSource(

@@ -431,12 +431,24 @@ class ControlApplication:
             "authority_mode": self.runtime.control_authority.mode.value,
             "control_functions": {
                 function.value: {
-                    "service": self.runtime.control_authority.functions[function].value,
+                    "service": self.runtime.control_authority.states[function].value,
                     "blocked": sorted(self.runtime.control_authority.blocks[function]),
                     "can_output": self.runtime.control_authority.can_output(function),
                 }
-                for function in self.runtime.control_authority.functions
+                for function in self.runtime.control_authority.states
             },
+            "authority_audit": [
+                {
+                    "timestamp_ns": record.timestamp_ns,
+                    "operator": record.operator,
+                    "function": record.function.value if record.function else None,
+                    "action": record.action,
+                    "from_state": record.from_state,
+                    "to_state": record.to_state,
+                    "reason": record.reason,
+                }
+                for record in self.runtime.control_authority.audits()[-50:]
+            ],
         }
 
     async def _handle(
