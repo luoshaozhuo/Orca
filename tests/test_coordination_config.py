@@ -84,3 +84,11 @@ def test_unknown_parameter_is_rejected() -> None:
     }
     with pytest.raises(ValidationError):
         CoordinationPolicyConfig.model_validate(raw)
+
+
+def test_full_config_dump_and_reload_preserves_default_coordination() -> None:
+    original = load_config(CONFIGS)
+    from core.domain.config import OrcaConfig
+
+    reconstructed = OrcaConfig.model_validate(original.model_dump())
+    assert reconstructed.coordination == original.coordination
