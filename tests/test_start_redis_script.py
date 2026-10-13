@@ -340,3 +340,56 @@ def test_startup_timeout_removes_new_container(sandbox: dict[str, str]) -> None:
     assert "removed" in result.stderr
     assert not container_file(sandbox).exists()
     assert invoked(sandbox, "rm")
+
+
+def container_mapped(env: dict[str, str]) -> str:
+    content = container_file(env).read_text()
+    for line in content.splitlines():
+        if line.startswith("MAPPED="):
+            return line.split("=", 1)[1].strip('"')
+    raise AssertionError("MAPPED not recorded")
+
+
+def test_default_bind_ip_publishes_all_interfaces(sandbox: dict[str, str]) -> None:
+    env = {key: value for key, value in sandbox.items() if key != "REDIS_BIND_IP"}
+    result = run_script(env)
+    assert result.returncode == 0, result.stderr
+    assert container_mapped(env) == f"0.0.0.0:{env['REDIS_HOST_PORT']}"
+    assert "firewall" in result.stdout
+
+
+def test_loopback_bind_publishes_loopback_only(sandbox: dict[str, str]) -> None:
+    result = run_script(sandbox)
+    assert result.returncode == 0, result.stderr
+    assert container_mapped(sandbox) == f"127.0.0.1:{sandbox['REDIS_HOST_PORT']}"
+
+
+def test_specific_bind_ip_published(sandbox: dict[str, str]) -> None:
+    result = run_script(sandbox, REDIS_BIND_IP="127.0.0.2")
+    assert result.returncode == 0, result.stderr
+    assert container_mapped(sandbox) == f"127.0.0.2:{sandbox['REDIS_HOST_PORT']}"
+
+
+def test_invalid_bind_ip_rejected(sandbox: dict[str, str]) -> None:
+    for bad in ("999.1.1.1", "10.0.0.256", "not-an-ip", "10.0.0.1.5"):
+        result = run_script(sandbox, REDIS_BIND_IP=bad)
+        assert result.returncode != 0, bad
+        assert "invalid bind IP" in result.stderr
+
+
+def test_unavailable_bind_ip_rejected(sandbox: dict[str, str]) -> None:
+    result = run_script(sandbox, REDIS_BIND_IP="192.0.2.1")
+    assert result.returncode != 0
+    assert "address not available" in result.stderr
+
+
+def test_mapping_change_requires_explicit_rebuild(sandbox: dict[str, str]) -> None:
+    assert run_script(sandbox).returncode == 0
+    assert container_mapped(sandbox).startswith("127.0.0.1:")
+    result = run_script(sandbox, REDIS_BIND_IP="0.0.0.0")
+    assert result.returncode != 0
+    assert "cannot be modified online" in result.stderr
+    # 不自动删除或重建：容器与数据保持不变。
+    assert container_file(sandbox).exists()
+    assert not invoked(sandbox, "rm")
+    assert invocations(sandbox).count("run ") == 1

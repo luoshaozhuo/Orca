@@ -11,7 +11,9 @@ set -Eeuo pipefail
 
 REDIS_NAME="${REDIS_NAME:-orca-redis}"
 REDIS_IMAGE="${REDIS_IMAGE:-redis:7-alpine}"
-REDIS_BIND_IP="${REDIS_BIND_IP:-127.0.0.1}"
+# Collector 部署位置不预先假定，默认发布到宿主机全部 IPv4 接口；
+# 这是 Docker 端口发布地址，不是客户端连接目标，也不是容器内监听地址。
+REDIS_BIND_IP="${REDIS_BIND_IP:-0.0.0.0}"
 REDIS_HOST_PORT="${REDIS_HOST_PORT:-16379}"
 REDIS_CONTAINER_PORT=6379
 REDIS_USERNAME="${ORCA_REDIS_USERNAME:-orca}"
@@ -34,7 +36,20 @@ command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required"
 [[ "$REDIS_NAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ ]] || die "invalid container name"
 [[ "$REDIS_USERNAME" =~ ^[a-zA-Z0-9_.-]+$ ]] || die "invalid Redis username"
 [[ "$REDIS_HOST_PORT" =~ ^[0-9]+$ ]] && ((10#$REDIS_HOST_PORT >= 1 && 10#$REDIS_HOST_PORT <= 65535)) || die "invalid host port"
-[[ "$REDIS_BIND_IP" == 127.0.0.1 || "$REDIS_BIND_IP" == 0.0.0.0 ]] || die "bind IP must be 127.0.0.1 or 0.0.0.0"
+# 支持 0.0.0.0、127.0.0.1 及宿主机上可绑定的合法 IPv4 地址。
+case "$REDIS_BIND_IP" in
+    0.0.0.0|127.0.0.1) ;;
+    *)
+        [[ "$REDIS_BIND_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || die "invalid bind IP: $REDIS_BIND_IP"
+        command -v python3 >/dev/null 2>&1 || die "python3 is required to validate a specific bind IP"
+        REDIS_BIND_IP="$REDIS_BIND_IP" python3 - <<'PY' || die "invalid bind IP: $REDIS_BIND_IP"
+import ipaddress
+import os
+
+ipaddress.IPv4Address(os.environ["REDIS_BIND_IP"])
+PY
+        ;;
+esac
 
 umask 077
 mkdir -p "$REDIS_DATA_DIR" "$REDIS_AUTH_DIR"
@@ -122,7 +137,9 @@ if docker container inspect "$REDIS_NAME" >/dev/null 2>&1; then
     managed="$(docker inspect -f '{{ index .Config.Labels "org.orca.redis.managed" }}' "$REDIS_NAME")"
     [[ "$managed" == "true" ]] || die "container $REDIS_NAME exists but is not Orca-managed"
     mapped="$(docker inspect -f '{{ (index (index .HostConfig.PortBindings "6379/tcp") 0).HostIp }}:{{ (index (index .HostConfig.PortBindings "6379/tcp") 0).HostPort }}' "$REDIS_NAME")"
-    [[ "$mapped" == "$REDIS_BIND_IP:$REDIS_HOST_PORT" ]] || die "existing container maps $mapped; requested $REDIS_BIND_IP:$REDIS_HOST_PORT"
+    # 端口发布地址无法在线修改；脚本绝不为此自动删除或重建容器。
+    [[ "$mapped" == "$REDIS_BIND_IP:$REDIS_HOST_PORT" ]] || die \
+        "existing container maps $mapped; requested $REDIS_BIND_IP:$REDIS_HOST_PORT - port mapping cannot be modified online; explicitly recreate the container (docker rm -f $REDIS_NAME) if the change is intended"
     mounts="$(docker inspect -f '{{ range .Mounts }}{{ .Destination }}={{ .Source }};{{ end }}' "$REDIS_NAME")"
     [[ "$mounts" == *"/data=$REDIS_DATA_DIR;"* ]] || die "existing container data dir mismatch: $mounts"
     [[ "$mounts" == *"/usr/local/etc/redis/users.acl=$REDIS_ACL_FILE;"* ]] || die "existing container ACL mount mismatch: $mounts"
@@ -146,18 +163,32 @@ if docker container inspect "$REDIS_NAME" >/dev/null 2>&1; then
         die "Redis authentication failed for existing container $REDIS_NAME; explicit password rotation required"
     fi
     info "Redis container available: $REDIS_NAME ($mapped)"
+    if [[ "$REDIS_BIND_IP" == "0.0.0.0" ]]; then
+        info "NOTE: Redis is published on all host IPv4 interfaces; restrict $REDIS_HOST_PORT/TCP sources via the host firewall."
+    fi
     exit 0
 fi
 
 # 测试端口可绑定；实际 Docker 映射也会再次进行冲突检查。
+# 区分地址不可绑定（宿主机无此 IP）与端口被占用，给出明确错误。
 if command -v python3 >/dev/null 2>&1; then
-    REDIS_BIND_IP="$REDIS_BIND_IP" REDIS_HOST_PORT="$REDIS_HOST_PORT" python3 - <<'PY' || die "host port is already occupied"
+    bind_error="$(REDIS_BIND_IP="$REDIS_BIND_IP" REDIS_HOST_PORT="$REDIS_HOST_PORT" python3 - <<'PY'
+import errno
 import os
 import socket
 
-with socket.socket() as sock:
-    sock.bind((os.environ["REDIS_BIND_IP"], int(os.environ["REDIS_HOST_PORT"])))
+try:
+    with socket.socket() as sock:
+        sock.bind((os.environ["REDIS_BIND_IP"], int(os.environ["REDIS_HOST_PORT"])))
+except OSError as exc:
+    if exc.errno == errno.EADDRNOTAVAIL:
+        print("address not available on this host")
+    elif exc.errno == errno.EADDRINUSE:
+        print("host port is already occupied")
+    else:
+        print(f"bind failed: {exc}")
 PY
+)" && [[ -z "$bind_error" ]] || die "cannot bind $REDIS_BIND_IP:$REDIS_HOST_PORT - $bind_error"
 fi
 
 # 容器尚未创建：以解析出的密码为准同步密码文件及 ACL（ACL 仅存 SHA256 摘要）。
@@ -177,6 +208,7 @@ docker run -d \
     "$REDIS_IMAGE" redis-server \
     --aclfile /usr/local/etc/redis/users.acl \
     --appendonly yes \
+    --protected-mode yes \
     --dir /data >/dev/null
 
 # 健康检查超时：仅清理本次新建的容器，不触碰数据目录与已有容器。
@@ -185,6 +217,12 @@ if ! wait_ready "$password"; then
     die "Redis failed to become ready within ${REDIS_HEALTH_TIMEOUT}s; new container removed"
 fi
 
-info "Redis started: $REDIS_NAME at $REDIS_BIND_IP:$REDIS_HOST_PORT"
+info "Redis started: $REDIS_NAME; published at $REDIS_BIND_IP:$REDIS_HOST_PORT (container port $REDIS_CONTAINER_PORT)"
 info "Redis username: $REDIS_USERNAME; password file: $REDIS_PASSWORD_FILE"
 info "Data directory: $REDIS_DATA_DIR; restart policy: always"
+if [[ "$REDIS_BIND_IP" == "0.0.0.0" ]]; then
+    info "NOTE: Redis is published on all host IPv4 interfaces. Clients (Collector/Orca)"
+    info "      must connect to this host's IP or domain name, never to 0.0.0.0."
+    info "      Restrict $REDIS_HOST_PORT/TCP source addresses via the host firewall;"
+    info "      prefer a controlled business network or VPN for production access."
+fi
