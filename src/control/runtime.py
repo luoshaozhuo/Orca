@@ -13,6 +13,7 @@ from .cycle import ControlCycle
 
 if TYPE_CHECKING:
     from core.application.read_only_planning_cycle import PlanningCyclePort
+    from core.application.safe_plan_dispatcher import SafePlanDispatcher
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,7 @@ class ControlRuntime:
         reset_control_state: Callable[[str], None] | None = None,
         planning_cycle: PlanningCyclePort | None = None,
         planning_tasks: frozenset[str] = frozenset(),
+        dispatcher: SafePlanDispatcher | None = None,
     ) -> None:
         self.config = config
         self.control_authority = ControlAuthority()
@@ -41,6 +43,8 @@ class ControlRuntime:
             raise ValueError("unknown planning task")
         self._planning_cycle = planning_cycle
         self._planning_tasks = planning_tasks
+        self._dispatcher = dispatcher
+        self.dispatch_blocked: dict[str, str] = {}
         self.planning_results: dict[str, object] = {}
         self.write_enabled = False  # 现场写权限未验证；生产装配不得自动放开
         self.states = {name: "STOPPED" for name in config.tasks}
@@ -64,6 +68,7 @@ class ControlRuntime:
             and function is not None
             and self.control_authority.can_output(function)
             and self.states[task_id] == "RUNNING"
+            and task_id not in self.dispatch_blocked
         )
 
     async def enter_manual(self, *, authorized: bool) -> None:
@@ -103,6 +108,14 @@ class ControlRuntime:
             self._authority[target] = task_id
         self.states[task_id] = "RUNNING"
         self._workers[task_id] = asyncio.create_task(self._run_task(task_id))
+
+    def clear_dispatch_block(self, task_id: str, *, authorized: bool) -> None:
+        """仅任务停止后人工授权清除 UNKNOWN 闭锁，不自动补发。"""
+        if not authorized:
+            raise PermissionError("dispatch unblock requires authorization")
+        if task_id not in self.states or self.states[task_id] != "STOPPED":
+            raise RuntimeError("dispatch unblock requires stopped task")
+        self.dispatch_blocked.pop(task_id, None)
 
     def _reset_task_state(self, task_id: str) -> None:
         self.planning_results.pop(task_id, None)
@@ -157,6 +170,15 @@ class ControlRuntime:
                         assert self._planning_cycle is not None
                         result = await self._planning_cycle.execute(task_id)
                         self.planning_results[task_id] = result
+                        if self._dispatcher is not None and self.write_enabled:
+                            receipt = await self._dispatcher.dispatch(task_id, result)
+                            if receipt.status != "CONFIRMED_SUCCESS":
+                                reason = f"dispatch {receipt.status}: {receipt.reason}"
+                                self.reasons[task_id] = reason
+                                self.dispatch_blocked[task_id] = reason
+                                self.write_enabled = False
+                                self._reset_task_state(task_id)
+                                continue
                         self.reasons.pop(task_id, None)
                     elif self.cycle is not None:
                         reason = await self.cycle.execute(
