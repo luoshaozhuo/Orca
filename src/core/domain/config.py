@@ -216,6 +216,28 @@ class ControllerConfig(ConfigModel):
         return self
 
 
+class PlanningStorageConfig(ConfigModel):
+    soc_point: str = Field(min_length=1)
+    soc_min: float = Field(ge=0, le=1)
+    soc_max: float = Field(ge=0, le=1)
+    energy_mwh: float = Field(gt=0)
+    charge_efficiency: float = Field(gt=0, le=1)
+    discharge_efficiency: float = Field(gt=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_storage(self) -> PlanningStorageConfig:
+        if self.soc_min > self.soc_max:
+            raise ValueError("storage SOC limits are inverted")
+        for value in (
+            self.energy_mwh,
+            self.charge_efficiency,
+            self.discharge_efficiency,
+        ):
+            if not math.isfinite(value):
+                raise ValueError("storage energy parameters must be finite")
+        return self
+
+
 class PlanningDeviceConfig(ConfigModel):
     device_id: str = Field(min_length=1)
     p_point: str = Field(min_length=1)
@@ -230,6 +252,11 @@ class PlanningDeviceConfig(ConfigModel):
     q_auto: bool = False
     p_weight: float = Field(default=1.0, gt=0)
     q_weight: float = Field(default=1.0, gt=0)
+    p_ramp_up: float | None = Field(default=None, ge=0)
+    p_ramp_down: float | None = Field(default=None, ge=0)
+    q_ramp_up: float | None = Field(default=None, ge=0)
+    q_ramp_down: float | None = Field(default=None, ge=0)
+    storage: PlanningStorageConfig | None = None
 
     @model_validator(mode="after")
     def validate_power_bounds(self) -> PlanningDeviceConfig:
@@ -243,8 +270,20 @@ class PlanningDeviceConfig(ConfigModel):
             raise ValueError("planning device capability limits are inverted")
         if self.technology not in {"wind", "pv", "storage", "svg"}:
             raise ValueError("unknown planning device technology")
-        if self.technology == "storage" and self.p_auto:
+        if self.technology == "storage" and self.p_auto and self.storage is None:
             raise ValueError("storage automatic P requires a configured SOC mapping")
+        if self.technology != "storage" and self.storage is not None:
+            raise ValueError("storage config requires storage technology")
+        for names in (("p_ramp_up", "p_ramp_down"), ("q_ramp_up", "q_ramp_down")):
+            provided = [getattr(self, name) is not None for name in names]
+            if any(provided) and not all(provided):
+                raise ValueError("ramp rate requires both up and down parameters")
+            if any(
+                getattr(self, name) is not None
+                and not math.isfinite(getattr(self, name))
+                for name in names
+            ):
+                raise ValueError("device ramp rate must be finite")
         return self
 
 
