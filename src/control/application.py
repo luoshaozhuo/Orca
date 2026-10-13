@@ -188,11 +188,12 @@ class ControlApplication:
             return False
         if not self.runtime.ready or self.runtime.states[task_id] != "RUNNING":
             return False
-        control_function = (
-            ControlFunction.PFR
-            if function == CoordinationFunction.PFR
-            else ControlFunction.IR
-        )
+        if function == CoordinationFunction.PFR:
+            control_function = ControlFunction.PFR
+        elif function == CoordinationFunction.IR:
+            control_function = ControlFunction.IR
+        else:
+            return False
         return self.runtime.control_authority.can_output(control_function)
 
     def _can_plan_device(
@@ -208,11 +209,12 @@ class ControlApplication:
             return False
         if not self.runtime.ready or self.runtime.states[task_id] != "RUNNING":
             return False
-        function = (
-            ControlFunction.AGC
-            if quantity == ControlQuantity.ACTIVE_POWER
-            else ControlFunction.AVC
-        )
+        if quantity == ControlQuantity.ACTIVE_POWER:
+            function = ControlFunction.AGC
+        elif quantity == ControlQuantity.REACTIVE_POWER:
+            function = ControlFunction.AVC
+        else:
+            return False
         return self.runtime.control_authority.can_output(function)
 
     def _reset_control_state(self, task_id: str) -> None:
