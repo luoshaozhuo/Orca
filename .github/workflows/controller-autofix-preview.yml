@@ -1,0 +1,39 @@
+name: Controller Ruff Auto-fix Preview
+on:
+  push:
+    branches:
+      - feat/controller-v0-11-coordination
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Ruff
+        run: python -m pip install ruff==0.17.0
+      - name: Prepare safe autofix patch
+        run: |
+          python -m ruff check --fix --exclude src/infrastructure/wind_hub/rpc src tests || true
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          changed = subprocess.check_output(
+              ["git", "diff", "--name-only"], text=True
+          ).splitlines()
+          print(f"AUTOFIX_FILE_COUNT={len(changed)}")
+          for name in changed:
+              if not (name.startswith("src/") or name.startswith("tests/")):
+                  raise ValueError("unexpected changed path")
+              data = {"path": name, "content": Path(name).read_text(encoding="utf-8")}
+              print("AUTOFIX_RECORD=" + json.dumps(data, ensure_ascii=True))
+          PY
