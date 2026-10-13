@@ -525,10 +525,32 @@ class OrcaConfig(ConfigModel):
                         raise ValueError(
                             f"task {name}: planning device not in task resources"
                         )
+                    resource = self.resources[device.device_id]
+                    mapped = {point.point_id for point in resource.inputs.values()}
+                    required = {device.p_point, device.q_point}
+                    if device.storage is not None:
+                        required.add(device.storage.soc_point)
+                    if not required <= mapped:
+                        raise ValueError(
+                            f"task {name}: planning device measurement not registered"
+                        )
                 if task.planning.poi_device_id not in self.resources:
                     raise ValueError(
                         f"task {name}: planning POI resource is not configured"
                     )
+                poi = self.resources[task.planning.poi_device_id]
+                if task.planning.poi_active_point not in {
+                    point.point_id for point in poi.inputs.values()
+                }:
+                    raise ValueError(f"task {name}: POI measurement not registered")
+                for reference in task.planning.reference_inputs:
+                    if reference.resource_id not in self.resources:
+                        raise ValueError(f"task {name}: reference resource not registered")
+                    resource = self.resources[reference.resource_id]
+                    if reference.point_id not in {
+                        point.point_id for point in resource.inputs.values()
+                    }:
+                        raise ValueError(f"task {name}: reference measurement not registered")
             for resource_id in task.resource_ids:
                 if resource_id not in self.resources:
                     raise ValueError(f"task {name}: unknown resource {resource_id}")
