@@ -66,6 +66,7 @@ class DevicePQCapability:
             minimum=max(self.p_min, -p_limit),
             maximum=min(self.p_max, p_limit),
             controllable=self.p_auto,
+            weight=self.p_weight,
         )
 
     def reactive_bounds(self, *, planned_p: float | None = None) -> DevicePowerCapability:
@@ -80,6 +81,7 @@ class DevicePQCapability:
             minimum=max(self.q_min, -q_limit),
             maximum=min(self.q_max, q_limit),
             controllable=self.q_auto,
+            weight=self.q_weight,
         )
 
 
