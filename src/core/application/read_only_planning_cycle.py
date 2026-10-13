@@ -97,6 +97,19 @@ class ReadOnlyPlanningCycle:
             controller.reset()
             raise
 
+    def replace_controller(
+        self,
+        task_id: str,
+        controller: ActivePowerController,
+    ) -> None:
+        """仅由已停止任务的生命周期管理者调用；不做运行期无扰假设。"""
+        previous = self._controllers.get(task_id)
+        if previous is None:
+            raise ValueError(f"no planning controller for {task_id}")
+        previous.reset()
+        controller.reset()
+        self._controllers[task_id] = controller
+
     def reset(self, task_id: str) -> None:
         controller = self._controllers.get(task_id)
         if controller is not None:
