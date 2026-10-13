@@ -41,21 +41,25 @@ class ControlPipeline:
     signal: SignalProcessor | None = None
 
     def evaluate(self, sample: ControlLawInput) -> ControlLawResult:
-        """依次执行反馈滤波、参考轨迹、控制律。"""
-        processor = self.signal
-        if processor is not None:
-            measured = processor.step(sample.measurement.value, sample.dt_s)
-            sample = replace(
-                sample,
-                measurement=replace(sample.measurement, value=measured),
+        """依次处理反馈、轨迹与控制律；任何故障均清除历史状态。"""
+        try:
+            processor = self.signal
+            if processor is not None:
+                measured = processor.step(sample.measurement.value, sample.dt_s)
+                sample = replace(
+                    sample,
+                    measurement=replace(sample.measurement, value=measured),
+                )
+            reference = self.trajectory.step(sample.reference.value, sample.dt_s)
+            return self.law.calculate(
+                replace(
+                    sample,
+                    reference=replace(sample.reference, value=reference),
+                )
             )
-        reference = self.trajectory.step(sample.reference.value, sample.dt_s)
-        return self.law.calculate(
-            replace(
-                sample,
-                reference=replace(sample.reference, value=reference),
-            )
-        )
+        except Exception:
+            self.reset()
+            raise
 
     def reset(self) -> None:
         """功能退出时清除滤波、历史积分和参考轨迹。"""
