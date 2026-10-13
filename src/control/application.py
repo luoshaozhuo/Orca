@@ -114,6 +114,8 @@ class ControlApplication:
         task = self.config.tasks[task_id]
         if device_id not in task.resource_ids:
             return False
+        if not self.runtime.ready or self.runtime.states[task_id] != "RUNNING":
+            return False
         function = (
             ControlFunction.AGC
             if quantity == ControlQuantity.ACTIVE_POWER
@@ -168,6 +170,8 @@ class ControlApplication:
                     "reactive_setpoints": len(result.allocation.reactive),
                 }
                 for task_id, result in self.runtime.planning_results.items()
+                if self.runtime.ready and self.runtime.states[task_id] == "RUNNING"
+                and self.runtime.control_authority.can_output(ControlFunction.AGC)
             },
             "authority_mode": self.runtime.control_authority.mode.value,
             "control_functions": {
