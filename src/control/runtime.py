@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 
 from core.domain.config import OrcaConfig
 from core.domain.control_authority import ControlAuthority, ControlFunction
@@ -15,11 +16,19 @@ logger = logging.getLogger(__name__)
 class ControlRuntime:
     """独立任务顺序执行；首阶段仅实现预检查和空控制循环。"""
 
-    def __init__(self, config: OrcaConfig, source: object, cycle: ControlCycle | None = None) -> None:
+    def __init__(
+        self,
+        config: OrcaConfig,
+        source: object,
+        cycle: ControlCycle | None = None,
+        *,
+        reset_control_state: Callable[[str], None] | None = None,
+    ) -> None:
         self.config = config
         self.control_authority = ControlAuthority()
         self.source = source
         self.cycle = cycle
+        self._reset_control_state = reset_control_state
         self.write_enabled = False  # 现场写权限未验证；生产装配不得自动放开
         self.states = {name: "STOPPED" for name in config.tasks}
         self.reasons: dict[str, str] = {}
@@ -78,6 +87,8 @@ class ControlRuntime:
                 raise RuntimeError(f"output {target} is already owned by task {owner}")
         for target in targets:
             self._authority[target] = task_id
+        if self._reset_control_state is not None:
+            self._reset_control_state(task_id)
         self.states[task_id] = "RUNNING"
         self._workers[task_id] = asyncio.create_task(self._run_task(task_id))
 
@@ -93,6 +104,8 @@ class ControlRuntime:
                 pass
         self.states[task_id] = "STOPPED"
         self._release_authority(task_id)
+        if self._reset_control_state is not None:
+            self._reset_control_state(task_id)
 
     def _release_authority(self, task_id: str) -> None:
         for target, owner in list(self._authority.items()):
@@ -114,6 +127,8 @@ class ControlRuntime:
                 deadline = loop.time() + interval
                 if not self.ready:
                     self.reasons[task_id] = "external dependencies unavailable"
+                    if self._reset_control_state is not None:
+                        self._reset_control_state(task_id)
                     continue
                 try:
                     pairs = [
@@ -128,6 +143,8 @@ class ControlRuntime:
                         )
                         if reason:
                             self.reasons[task_id] = reason
+                            if self._reset_control_state is not None:
+                                self._reset_control_state(task_id)
                         else:
                             self.reasons.pop(task_id, None)
                     else:
@@ -135,13 +152,19 @@ class ControlRuntime:
                         errors = validate_inputs(self.config, task_id, records)
                         if errors:
                             self.reasons[task_id] = "; ".join(errors)
+                            if self._reset_control_state is not None:
+                                self._reset_control_state(task_id)
                         else:
                             self.reasons.pop(task_id, None)
                 except asyncio.CancelledError:
                     raise
                 except Exception as exc:
                     self.reasons[task_id] = f"cycle failed: {exc}"
+                    if self._reset_control_state is not None:
+                        self._reset_control_state(task_id)
                     logger.warning("control task %s skipped: %s", task_id, exc)
         finally:
             self.states[task_id] = "STOPPED"
             self._release_authority(task_id)
+            if self._reset_control_state is not None:
+                self._reset_control_state(task_id)
