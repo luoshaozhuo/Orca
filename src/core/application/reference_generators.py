@@ -8,11 +8,17 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from core.domain.control_value import (
+    ControlQuantity,
+    ControlScope,
+    ControlValue,
+    ControlValueKind,
+    ControlValueRole,
+)
 from core.domain.reference import (
     ControlReference,
     ReferencePurpose,
     ReferenceSource,
-    ValueKind,
 )
 
 
@@ -66,12 +72,19 @@ def _reference(
     valid_until_ns: int,
     generation: int,
 ) -> ControlReference:
+    control = ControlValue(
+        quantity=ControlQuantity.ACTIVE_POWER,
+        scope=ControlScope.POI,
+        target=target,
+        role=ControlValueRole.REFERENCE,
+        kind=ControlValueKind.DELTA,
+        value=value,
+        unit="MW",
+    )
     return ControlReference(
         purpose=purpose,
         source=ReferenceSource.INTERNAL,
-        target=target,
-        kind=ValueKind.DELTA,
-        value=value,
+        control=control,
         timestamp_ns=timestamp_ns,
         valid_until_ns=valid_until_ns,
         generation=generation,
@@ -94,9 +107,16 @@ def generate_pfr_reference(
     magnitude = max(abs(deviation) - parameters.deadband_hz, 0.0)
     change = -math.copysign(parameters.gain_mw_per_hz * magnitude, deviation)
     return _reference(
-        ReferencePurpose.PFR_DELTA, target,
-        _clamp(change, parameters.max_decrease_mw, parameters.max_increase_mw),
-        timestamp_ns, valid_until_ns, generation,
+        ReferencePurpose.PFR_DELTA,
+        target,
+        _clamp(
+            change,
+            parameters.max_decrease_mw,
+            parameters.max_increase_mw,
+        ),
+        timestamp_ns,
+        valid_until_ns,
+        generation,
     )
 
 
@@ -114,7 +134,14 @@ def generate_inertia_reference(
         raise ValueError("RoCoF must be finite")
     change = -parameters.gain_mw_second_per_hz * rocof_hz_per_second
     return _reference(
-        ReferencePurpose.IR_DELTA, target,
-        _clamp(change, parameters.max_decrease_mw, parameters.max_increase_mw),
-        timestamp_ns, valid_until_ns, generation,
+        ReferencePurpose.IR_DELTA,
+        target,
+        _clamp(
+            change,
+            parameters.max_decrease_mw,
+            parameters.max_increase_mw,
+        ),
+        timestamp_ns,
+        valid_until_ns,
+        generation,
     )
