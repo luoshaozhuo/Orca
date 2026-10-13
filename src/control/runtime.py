@@ -91,6 +91,8 @@ class ControlRuntime:
             raise ValueError(f"unknown task: {task_id}")
         if not self.config.tasks[task_id].enabled:
             raise ValueError(f"disabled task: {task_id}")
+        if task_id in self.dispatch_blocked:
+            raise RuntimeError("dispatch blocked: explicit clearance required")
         if self.states[task_id] != "STOPPED":
             return
         if not self.ready:
@@ -162,6 +164,10 @@ class ControlRuntime:
             while True:
                 await asyncio.sleep(max(0.0, deadline - loop.time()))
                 deadline = loop.time() + interval
+                if task_id in self.dispatch_blocked:
+                    self.reasons[task_id] = self.dispatch_blocked[task_id]
+                    self._reset_task_state(task_id)
+                    continue
                 if not self.ready:
                     self.reasons[task_id] = "external dependencies unavailable"
                     self._reset_task_state(task_id)
