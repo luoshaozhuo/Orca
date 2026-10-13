@@ -115,3 +115,40 @@ def test_soc_and_ramp_are_applied_before_joint_allocation() -> None:
 def test_empty_device_list_fails_closed() -> None:
     with pytest.raises(ValueError, match="requires device"):
         solve(snapshot(), 0.0, 0.0)
+
+
+def test_bad_quality_device_blocks_joint_plan() -> None:
+    s = snapshot(record(device("wtg"), quality_good=False))
+    with pytest.raises(ValueError, match="bad capability quality"):
+        solve(s, 0.0, 0.0)
+
+
+def test_future_snapshot_is_rejected() -> None:
+    s = snapshot(record(device("wtg")))
+    with pytest.raises(ValueError, match="unavailable"):
+        JointPowerAllocator().allocate(
+            s, p_target=0.0, q_target=0.0,
+            now_ns=99, maximum_age_ns=30,
+        )
+
+
+def test_nonfinite_target_is_rejected() -> None:
+    s = snapshot(record(device("wtg")))
+    with pytest.raises(ValueError, match="non-finite"):
+        solve(s, float("nan"), 0.0)
+
+
+def test_manual_pq_device_produces_no_setpoint() -> None:
+    s = snapshot(record(device("manual", p=3.0, q=4.0, auto_p=False, auto_q=False)))
+    result = solve(s, 3.0, 4.0)
+    assert result.feasible
+    assert not result.active and not result.reactive
+
+
+def test_mixed_quality_snapshot_is_rejected_even_if_other_device_can_supply() -> None:
+    s = snapshot(
+        record(device("a")),
+        record(device("b"), quality_good=False),
+    )
+    with pytest.raises(ValueError, match="bad capability quality"):
+        solve(s, 1.0, 1.0)
