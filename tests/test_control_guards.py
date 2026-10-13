@@ -8,7 +8,7 @@ from control.runtime import ControlRuntime
 from core.domain.decision import ControlDecision, Setpoint
 from infrastructure.config.yaml import load_config
 
-CONFIG = Path(__file__).resolve().parents[1] / "configs" / "template"
+CONFIG = Path(__file__).resolve().parents[1] / "configs"
 
 
 def test_setpoint_limits():

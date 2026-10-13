@@ -36,11 +36,15 @@ class CommanderClient:
         return bool(response.running), response.active_config_hash
 
     async def devices(self) -> set[str]:
+        if self._stub is None:
+            await self.connect()
         assert self._stub is not None
         response = await self._stub.ListDevices(Empty(), timeout=self._timeout)
         return {device.device_id for device in response.devices if device.enabled}
 
     async def resolve_point(self, device_id: str, point_id: str) -> str:
+        if self._stub is None:
+            await self.connect()
         assert self._stub is not None
         response = await self._stub.ResolvePoint(
             pb.PointRequest(device_id=device_id, point_id=point_id),

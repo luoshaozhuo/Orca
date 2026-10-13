@@ -4,11 +4,30 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import redis.asyncio as redis
 
 from core.domain.config import RedisConfig
+
+
+def resolve_password(config: RedisConfig) -> str | None:
+    """密码优先级：password_env 环境变量（非空） > password_file 文件 > None。
+
+    启动脚本生成的密码文件对 Orca 进程不可见为环境变量，因此允许显式配置文件路径。
+    """
+    if config.password_env:
+        password = os.environ.get(config.password_env)
+        if password:
+            return password
+    if config.password_file:
+        path = Path(config.password_file).expanduser()
+        if path.is_file():
+            password = path.read_text(encoding="utf-8").strip("\r\n")
+            if password:
+                return password
+    return None
 
 
 class RedisSource:
@@ -21,7 +40,7 @@ class RedisSource:
 
     async def connect(self) -> None:
         await self.close()
-        password = os.environ.get(self._config.password_env) if self._config.password_env else None
+        password = resolve_password(self._config)
         self._client = redis.Redis(
             host=self._config.host,
             port=self._config.port,
