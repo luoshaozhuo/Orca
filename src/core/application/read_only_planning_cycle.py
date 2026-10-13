@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from collections.abc import Callable
 from typing import Protocol
 
 from core.application.active_power_controller import ActivePowerController
@@ -39,6 +40,7 @@ class ReadOnlyPlanningCycle:
         allocator: JointPowerAllocator,
         *,
         maximum_age_ns: int,
+        permitted: Callable[[str], bool] | None = None,
     ) -> None:
         if maximum_age_ns <= 0:
             raise ValueError("planning maximum age must be positive")
@@ -46,6 +48,7 @@ class ReadOnlyPlanningCycle:
         self._controllers = controllers
         self._allocator = allocator
         self._maximum_age_ns = maximum_age_ns
+        self._permitted = permitted
 
     async def execute(self, task_id: str) -> PlanningCycleResult:
         if task_id not in self._controllers:
@@ -84,6 +87,8 @@ class ReadOnlyPlanningCycle:
             )
             if completed_ns - snapshot.acquired_at_ns > self._maximum_age_ns:
                 raise ValueError("planning snapshot expired during calculation")
+            if self._permitted is not None and not self._permitted(task_id):
+                raise ValueError("planning authority changed during calculation")
             return PlanningCycleResult(
                 allocation=allocation,
                 acquired_at_ns=snapshot.acquired_at_ns,
