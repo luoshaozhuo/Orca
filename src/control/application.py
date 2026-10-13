@@ -156,6 +156,7 @@ class ControlApplication:
                 },
                 JointPowerAllocator(),
                 maximum_age_ns=int(config.wind_hub.watchdog.interval * 1e9),
+                permitted=self._can_publish_plan,
             )
         self.runtime = ControlRuntime(
             config, self.redis, self.cycle,
@@ -169,6 +170,14 @@ class ControlApplication:
         self.watchdog = WindHubWatchdog(config, self.runtime, self.redis, self.commander)
         self._server: asyncio.AbstractServer | None = None
         self._socket = Path(config.runtime.socket_path)
+
+    def _can_publish_plan(self, task_id: str) -> bool:
+        return (
+            task_id in self.config.tasks
+            and self.runtime.ready
+            and self.runtime.states[task_id] == "RUNNING"
+            and self.runtime.control_authority.can_output(ControlFunction.AGC)
+        )
 
     def _can_contribute(
         self,
