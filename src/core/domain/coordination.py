@@ -53,6 +53,8 @@ class ControlDemand:
 
     function: CoordinationFunction
     value: ControlValue
+    generation: int = 0
+    event_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.value.quantity != ControlQuantity.ACTIVE_POWER:
@@ -61,6 +63,10 @@ class ControlDemand:
             raise ValueError("coordination input must have CONTROL_DEMAND role")
         if self.value.kind != ControlValueKind.DELTA:
             raise ValueError("coordination input must be a delta")
+        if self.generation < 0:
+            raise ValueError("demand generation must be nonnegative")
+        if self.event_id is not None and not self.event_id:
+            raise ValueError("event_id cannot be empty")
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +75,7 @@ class CoordinationContext:
 
     base: ControlValue
     demands: tuple[ControlDemand, ...]
+    base_generation: int = 0
 
     def __post_init__(self) -> None:
         if self.base.quantity != ControlQuantity.ACTIVE_POWER:
@@ -81,9 +88,19 @@ class CoordinationContext:
         ):
             raise ValueError("invalid coordination base role")
 
+        if self.base_generation < 0:
+            raise ValueError("base generation must be nonnegative")
+
         functions = [item.function for item in self.demands]
         if len(functions) != len(set(functions)):
             raise ValueError("duplicate control demand")
+
+        # 同一响应事件只允许一个实际功率贡献，防止内外部重复响应。
+        event_ids = [
+            item.event_id for item in self.demands if item.event_id is not None
+        ]
+        if len(event_ids) != len(set(event_ids)):
+            raise ValueError("same event cannot contribute multiple demands")
 
         for demand in self.demands:
             value = demand.value
@@ -114,3 +131,10 @@ class CoordinationResult:
     algorithm: CoordinationAlgorithm
     matched_rule: tuple[CoordinationFunction, ...] | None
     contributions: tuple[ContributionDecision, ...]
+    base: float = 0.0
+    generation: int = 0
+    event_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.generation < 0:
+            raise ValueError("coordination generation must be nonnegative")

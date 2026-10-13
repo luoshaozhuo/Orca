@@ -62,6 +62,8 @@ def active_power_cycle_from_references(
             ControlDemand(
                 function=function,
                 value=replace(sample.control, role=ControlValueRole.CONTROL_DEMAND),
+                generation=sample.generation,
+                event_id=sample.event_id,
             )
         )
     return ActivePowerCycle(
@@ -73,4 +75,5 @@ def active_power_cycle_from_references(
         demands=tuple(demands),
         feedforward=feedforward,
         achievable=achievable,
+        base_generation=base.generation,
     )

@@ -30,6 +30,7 @@ class ActivePowerCycle:
     demands: tuple[ControlDemand, ...] = ()
     feedforward: float = 0.0
     achievable: float | None = None
+    base_generation: int = 0
 
     def law_input(self) -> ControlLawInput:
         return ControlLawInput(
@@ -69,7 +70,11 @@ class ActivePowerController:
                 raise ValueError("active-power controller requires plant or POI power")
             control = self.pipeline.evaluate(input_value)
             base = control.candidate
-            context = CoordinationContext(base=base, demands=cycle.demands)
+            context = CoordinationContext(
+                base=base,
+                demands=cycle.demands,
+                base_generation=cycle.base_generation,
+            )
             coordinated = self.coordinator.coordinate(context)
             if not cycle.minimum <= coordinated.target.value <= cycle.maximum:
                 raise ValueError("coordinated target exceeds cycle limits")

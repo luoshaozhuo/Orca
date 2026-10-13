@@ -324,6 +324,9 @@ class RedisPlanningSnapshotSource:
             if kind is None:
                 assert reference.kind is not None
                 kind = reference.kind
+            event_id = raw.get("event_id")
+            if event_id is not None and (not isinstance(event_id, str) or not event_id):
+                raise ValueError(f"{key}: invalid reference event id")
             sample = ControlReference(
                 purpose=reference.purpose,
                 source=reference.source,
@@ -335,6 +338,7 @@ class RedisPlanningSnapshotSource:
                 valid_until_ns=stamp_ns + reference.valid_for_ns,
                 generation=self._generation,
                 sequence_id=stamp_ns,
+                event_id=event_id,
             )
             pending.append((sample_key, sample))
         self._references.publish_many(tuple(sample for _, sample in pending))
