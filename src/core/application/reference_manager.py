@@ -32,6 +32,21 @@ class ReferenceManager:
                 raise ValueError(f"reference policy key mismatch: {key}")
             self._selected[key] = policy.primary
 
+    @classmethod
+    def from_controllers(cls, controllers: dict[str, object]) -> ReferenceManager:
+        """由已验证的控制器配置建立来源策略；跨控制器的键不可重复。"""
+        policies: dict[ReferenceKey, ReferenceSelection] = {}
+        for controller_id, controller in controllers.items():
+            for configured in controller.references:
+                policy = configured.to_selection()
+                key = (policy.purpose, policy.target)
+                if key in policies:
+                    raise ValueError(
+                        f"reference policy {key} is already owned by another controller"
+                    )
+                policies[key] = policy
+        return cls(policies)
+
     def publish(self, sample: ControlReference) -> None:
         key = (sample.purpose, sample.target)
         if key not in self.policies:
