@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 import time
 from dataclasses import dataclass
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any, Protocol
 
@@ -95,6 +96,7 @@ class RedisPlanningSnapshotSource:
         *,
         generation: int,
         maximum_age_ns: int,
+        can_plan: Callable[[str, str, ControlQuantity], bool] | None = None,
     ) -> None:
         if generation < 0 or maximum_age_ns <= 0:
             raise ValueError("invalid planning generation or age")
@@ -103,6 +105,7 @@ class RedisPlanningSnapshotSource:
         self._bindings = bindings
         self._generation = generation
         self._maximum_age_ns = maximum_age_ns
+        self._can_plan = can_plan
 
     @staticmethod
     def _value(record: dict[str, Any], key: tuple[str, str], now_ns: int, max_age: int) -> tuple[float, int]:
@@ -188,12 +191,18 @@ class RedisPlanningSnapshotSource:
                 ),
                 generation=self._generation,
                 quality_good=True,
-                p_authorized=False,
-                q_authorized=False,
+                p_authorized=(
+                    self._can_plan is not None
+                    and self._can_plan(task_id, device.device_id, ControlQuantity.ACTIVE_POWER)
+                ),
+                q_authorized=(
+                    self._can_plan is not None
+                    and self._can_plan(task_id, device.device_id, ControlQuantity.REACTIVE_POWER)
+                ),
             )
             for device in binding.devices
         )
-        # 测点有效不代表现场控制权限；默认不得将采样成功升级为写入授权。
+        # 测点有效不代表控制授权；未显式注入权限检查则一律拒绝自动分配。
         return PlanningSnapshot(
             active=cycle,
             devices=DeviceCapabilitySnapshot(
