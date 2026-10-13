@@ -19,6 +19,7 @@ from core.application.reference_manager import ReferenceManager
 from core.domain.config import OrcaConfig
 from core.domain.control_authority import ControlFunction
 from core.domain.control_value import ControlQuantity
+from core.domain.coordination import CoordinationFunction
 from core.domain.device_capability import DeviceTechnology
 from infrastructure.redis.planning_snapshot import (
     ActivePlanningBinding,
@@ -136,6 +137,7 @@ class ControlApplication:
                 generation=0,
                 maximum_age_ns=int(config.wind_hub.watchdog.interval * 1e9),
                 can_plan=self._can_plan_device,
+                can_contribute=self._can_contribute,
             )
         if planning_tasks and planning_snapshots is None:
             raise ValueError("planning tasks require an authorized snapshot source")
@@ -167,6 +169,22 @@ class ControlApplication:
         self.watchdog = WindHubWatchdog(config, self.runtime, self.redis, self.commander)
         self._server: asyncio.AbstractServer | None = None
         self._socket = Path(config.runtime.socket_path)
+
+    def _can_contribute(
+        self,
+        task_id: str,
+        function: CoordinationFunction,
+    ) -> bool:
+        if task_id not in self.config.tasks:
+            return False
+        if not self.runtime.ready or self.runtime.states[task_id] != "RUNNING":
+            return False
+        control_function = (
+            ControlFunction.PFR
+            if function == CoordinationFunction.PFR
+            else ControlFunction.IR
+        )
+        return self.runtime.control_authority.can_output(control_function)
 
     def _can_plan_device(
         self,
