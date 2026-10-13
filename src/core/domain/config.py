@@ -125,9 +125,86 @@ class ReferencePolicyConfig(ConfigModel):
         )
 
 
+class SignalStageConfig(ConfigModel):
+    algorithm: str = "passthrough"
+    tau_s: float | None = None
+
+    @model_validator(mode="after")
+    def validate_stage(self) -> SignalStageConfig:
+        if self.algorithm == "passthrough":
+            if self.tau_s is not None:
+                raise ValueError("passthrough signal does not accept tau_s")
+        elif self.algorithm == "low_pass":
+            if self.tau_s is None or not math.isfinite(self.tau_s) or self.tau_s <= 0:
+                raise ValueError("low_pass requires positive finite tau_s")
+        else:
+            raise ValueError(f"unsupported signal algorithm: {self.algorithm}")
+        return self
+
+
+class TrajectoryStageConfig(ConfigModel):
+    algorithm: str = "passthrough"
+    up_per_s: float | None = None
+    down_per_s: float | None = None
+
+    @model_validator(mode="after")
+    def validate_stage(self) -> TrajectoryStageConfig:
+        if self.algorithm == "passthrough":
+            if self.up_per_s is not None or self.down_per_s is not None:
+                raise ValueError("passthrough trajectory accepts no ramp limits")
+        elif self.algorithm == "ramp":
+            if self.up_per_s is None or self.down_per_s is None:
+                raise ValueError("ramp requires up_per_s and down_per_s")
+            if any(
+                not math.isfinite(value) or value < 0
+                for value in (self.up_per_s, self.down_per_s)
+            ):
+                raise ValueError("ramp limits must be finite and nonnegative")
+        else:
+            raise ValueError(f"unsupported trajectory algorithm: {self.algorithm}")
+        return self
+
+
+class ControlLawStageConfig(ConfigModel):
+    algorithm: str = "direct"
+    kp: float | None = None
+    ki: float | None = None
+    kaw: float | None = None
+
+    @model_validator(mode="after")
+    def validate_stage(self) -> ControlLawStageConfig:
+        names = {
+            "direct": frozenset(),
+            "p": frozenset({"kp"}),
+            "pi": frozenset({"kp", "ki", "kaw"}),
+        }
+        if self.algorithm not in names:
+            raise ValueError(f"unsupported law algorithm: {self.algorithm}")
+        provided = {name for name in ("kp", "ki", "kaw") if getattr(self, name) is not None}
+        if self.algorithm != "direct" and "kp" not in provided:
+            raise ValueError("p/pi control requires kp")
+        if self.algorithm == "pi" and "ki" not in provided:
+            raise ValueError("pi control requires ki")
+        if provided - names[self.algorithm]:
+            raise ValueError("unsupported parameters for control law")
+        if any(
+            not math.isfinite(getattr(self, name)) or getattr(self, name) < 0
+            for name in provided
+        ):
+            raise ValueError("control law gains must be finite and nonnegative")
+        return self
+
+
+class ControlPipelineConfig(ConfigModel):
+    signal: SignalStageConfig = Field(default_factory=SignalStageConfig)
+    trajectory: TrajectoryStageConfig = Field(default_factory=TrajectoryStageConfig)
+    law: ControlLawStageConfig = Field(default_factory=ControlLawStageConfig)
+
+
 class ControllerConfig(ConfigModel):
     type: str = Field(min_length=1)
     strategy: str = Field(min_length=1)
+    pipeline: ControlPipelineConfig = Field(default_factory=ControlPipelineConfig)
     enabled: bool = True
     references: tuple[ReferencePolicyConfig, ...] = ()
 
