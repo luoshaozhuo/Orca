@@ -379,7 +379,11 @@ class CoordinationParametersConfig(ConfigModel):
         *,
         functions: frozenset[CoordinationFunction],
     ) -> None:
-        provided = self.model_fields_set
+        # model_dump() 往返会显式包含默认 None/空容器；它们不算用户启用参数。
+        provided = {
+            name for name in self.model_fields_set
+            if getattr(self, name) not in (None, (), {})
+        }
         allowed: dict[CoordinationAlgorithm, frozenset[str]] = {
             CoordinationAlgorithm.DEFAULT: frozenset(
                 {"weights", "pfr_agc_mode", "ir_override"}
