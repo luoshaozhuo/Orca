@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from core.application.reference_manager import ReferenceManager
-from core.domain.config import ControllerConfig, OrcaConfig
+from core.domain.config import ControllerConfig
 from core.domain.reference import ReferencePurpose, ReferenceSource
 from infrastructure.config.yaml import load_config
 
