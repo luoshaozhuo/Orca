@@ -6,7 +6,6 @@
 """
 from __future__ import annotations
 
-import asyncio
 import time
 from datetime import UTC, datetime
 
@@ -111,7 +110,7 @@ def make_service(
         target="POI",
         valid_for_ns=60 * SECOND,
         generation=GENERATION,
-        maximum_age_ns=5 * SECOND,
+        maximum_age_ns=60 * SECOND,
         base_purpose=ReferencePurpose.ACTIVE_BASE,
         authorized_sources=frozenset({ReferenceSource.GRID, ReferenceSource.INTERNAL}),
         pfr=(
@@ -203,7 +202,7 @@ async def assemble(
     service = make_service(manager, authority, source, ir=ir, both=both)
     snapshot_source = RedisPlanningSnapshotSource(
         source, manager, planning_bindings(ir=ir, both=both),
-        generation=GENERATION, maximum_age_ns=5_000_000_000,
+        generation=GENERATION, maximum_age_ns=30_000_000_000,
         can_plan=lambda task, device, quantity: quantity == ControlQuantity.ACTIVE_POWER,
         can_contribute=lambda task, function: True,
     )
@@ -217,7 +216,7 @@ async def assemble(
             ),
         },
         JointPowerAllocator(),
-        maximum_age_ns=5_000_000_000,
+        maximum_age_ns=30_000_000_000,
     )
     scenario = CommanderScenario(
         enabled_devices={WTG},
@@ -237,7 +236,7 @@ async def assemble(
                 point_id="active_power_setpoint", minimum=0.0, maximum=30.0,
             ),
         ),
-        maximum_age_ns=5_000_000_000,
+        maximum_age_ns=30_000_000_000,
         permitted=lambda task_id: True,
         generation=lambda: GENERATION,
         output_owner=lambda device, point: TASK,
@@ -250,7 +249,7 @@ async def dispatch(cycle, dispatcher, scenario) -> float:
     result = await cycle.execute(TASK)
     assert result.allocation.feasible
     receipt = await dispatcher.dispatch(TASK, result)
-    assert receipt.status == DispatchStatus.CONFIRMED_SUCCESS
+    assert receipt.status == DispatchStatus.CONFIRMED_SUCCESS, receipt.reason
     writes = [
         write for write in scenario.writes
         if write.point_id == "active_power_setpoint"
@@ -323,19 +322,24 @@ async def test_internal_ir_event_drives_dispatch(
         redis_config, data_publisher, ir=True,
     )
     try:
+        # 虚拟时钟：样本时标按 0.3 s 精确间隔写入，RoCoF 估计与负载无关。
+        virtual = time.time() - 30.0
+
         async def feed(values: list[float]) -> None:
-            # 逐拍实时到达（0.25 s 间隔）：RoCoF 滑窗按真实时标估计。
+            nonlocal virtual
             for value in values:
-                await publish_frequency(data_publisher, value)
-                await asyncio.sleep(0.25)
+                virtual += 0.3
+                await publish_frequency(
+                    data_publisher, value, offset_s=virtual - time.time()
+                )
                 await service.update(time.time_ns())
 
         # 估计窗口预热：平坦样本，RoCoF≈0，IR 发布零增量。
-        await feed([50.00, 50.00, 50.00])
+        await feed([50.00, 50.00, 50.00, 50.00, 50.00])
         assert service.ir is not None and service.ir.phase == ResponsePhase.IDLE
         assert await dispatch(cycle, dispatcher, scenario) == pytest.approx(6.0)
 
-        # 约 0.4 Hz/s 频率下降：-50×(-0.4)=+20 MW 受 IR 限幅 +8 MW 截断。
+        # 频率持续下降（|RoCoF| 远超 0.1 Hz/s 阈值）：IR 增量受 +8 MW 限幅截断。
         await feed([49.90, 49.80])
         assert service.ir.phase == ResponsePhase.RESPONDING
         assert service.ir.event is not None
@@ -347,8 +351,8 @@ async def test_internal_ir_event_drives_dispatch(
         assert service.ir.event is not None
         assert service.ir.event.event_id == first_event
 
-        # 频率企稳：RoCoF 回落阈值内，事件闭合并停止贡献。
-        await feed([49.70, 49.70, 49.70])
+        # 频率企稳：滑窗完全清除斜坡样本后 RoCoF 回落阈值内，事件闭合并停止贡献。
+        await feed([49.70, 49.70, 49.70, 49.70, 49.70, 49.70])
         assert service.ir.phase != ResponsePhase.RESPONDING
         assert await dispatch(cycle, dispatcher, scenario) == pytest.approx(6.0)
     finally:
@@ -366,17 +370,22 @@ async def test_internal_pfr_and_ir_events_compose(
         redis_config, data_publisher, ir=False, both=True,
     )
     try:
+        virtual = time.time() - 30.0
+
         async def feed(values: list[float]) -> None:
+            nonlocal virtual
             for value in values:
-                await publish_frequency(data_publisher, value)
-                await asyncio.sleep(0.25)
+                virtual += 0.3
+                await publish_frequency(
+                    data_publisher, value, offset_s=virtual - time.time()
+                )
                 await service.update(time.time_ns())
 
         # 估计窗口预热：平坦样本，两事件均不触发。
-        await feed([50.00, 50.00, 50.00])
+        await feed([50.00, 50.00, 50.00, 50.00, 50.00])
         assert await dispatch(cycle, dispatcher, scenario) == pytest.approx(6.0)
 
-        # 频率斜坡下降约 0.4 Hz/s 且越过死区：PFR 与 IR 同时进入。
+        # 频率持续下降（|RoCoF| 超过阈值）且越过死区：PFR 与 IR 同时进入。
         await feed([49.90, 49.80])
         assert service.pfr is not None and service.ir is not None
         assert service.pfr.phase == ResponsePhase.RESPONDING
@@ -388,8 +397,8 @@ async def test_internal_pfr_and_ir_events_compose(
         # AGC 6.0 + PFR (0.20−0.05)×10=1.5 + IR 限幅 8.0。
         assert await dispatch(cycle, dispatcher, scenario) == pytest.approx(15.5)
 
-        # 频率企稳在死区外：IR 退出，PFR 事件保持且标识不变。
-        await feed([49.80, 49.80, 49.80])
+        # 频率企稳在死区外：滑窗清除斜坡样本后 IR 退出，PFR 事件保持且标识不变。
+        await feed([49.80, 49.80, 49.80, 49.80, 49.80, 49.80])
         assert service.ir.phase != ResponsePhase.RESPONDING
         assert service.pfr.phase == ResponsePhase.RESPONDING
         assert service.pfr.event is not None
