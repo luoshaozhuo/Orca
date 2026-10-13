@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import random
 
 import pytest
 
@@ -172,3 +173,24 @@ def test_storage_horizon_mismatch_rejected() -> None:
                 up_per_s=1.0, down_per_s=1.0, horizon_s=1.0,
             ),
         )
+
+
+def test_deterministic_feasible_joint_cases() -> None:
+    """固定随机种子构造已知可行的目标，验证联合投影守恒与能力圆。"""
+    randomizer = random.Random(17)
+    for _ in range(40):
+        items = []
+        p_goal = q_goal = 0.0
+        for index in range(3):
+            point = device(f"d{index}")
+            items.append(record(point))
+            angle = randomizer.uniform(-math.pi, math.pi)
+            magnitude = randomizer.uniform(0.0, 8.0)
+            p_goal += magnitude * math.cos(angle)
+            q_goal += magnitude * math.sin(angle)
+        result = solve(snapshot(*items), p_goal, q_goal)
+        assert result.feasible, (p_goal, q_goal, result)
+        assert abs(result.p_residual) <= 1e-6
+        assert abs(result.q_residual) <= 1e-6
+        for p, q in zip(result.active, result.reactive):
+            assert math.hypot(p.value, q.value) <= 10.000001
