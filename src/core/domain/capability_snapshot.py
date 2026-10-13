@@ -23,10 +23,13 @@ class DeviceCapabilityRecord:
     p_ramp: DeviceRampLimits | None = None
     q_ramp: DeviceRampLimits | None = None
     storage: StorageEnergyLimits | None = None
+    quality_good: bool = True
 
     def __post_init__(self) -> None:
         if self.timestamp_ns < 0 or self.generation < 0:
             raise ValueError("invalid device capability timestamp or generation")
+        if not isinstance(self.quality_good, bool):
+            raise ValueError("invalid capability quality flag")
         if self.storage is not None and self.capability.technology != DeviceTechnology.STORAGE:
             raise ValueError("storage constraints require a storage device")
 
@@ -62,6 +65,10 @@ class DeviceCapabilitySnapshot:
         if now_ns - self.sampled_at_ns > maximum_age_ns:
             raise ValueError("capability snapshot is stale")
         for record in self.records:
+            if not record.quality_good:
+                raise ValueError(
+                    f"{record.capability.device_id}: bad capability quality"
+                )
             if now_ns - record.timestamp_ns > maximum_age_ns:
                 raise ValueError(
                     f"{record.capability.device_id}: capability observation is stale"
