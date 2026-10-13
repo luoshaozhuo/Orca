@@ -167,6 +167,7 @@ class RedisPlanningSnapshotSource:
             maximum=binding.maximum,
             feedforward=measured[pairs[0]],
             active_functions=binding.active_functions,
+            required_generation=self._generation,
         )
         devices = tuple(
             DeviceCapabilityRecord(
