@@ -65,3 +65,35 @@ def test_individually_possible_but_jointly_impossible_fails_closed() -> None:
     )
     assert not result.feasible
     assert result.active == result.reactive == ()
+
+
+def test_p_only_control_freezes_q_and_emits_no_reactive_setpoints() -> None:
+    target_p = JointPlantTarget(
+        active=target(ControlQuantity.ACTIVE_POWER, 8.0),
+        reactive=None,
+    )
+    result = JointPlantAllocator(JointPowerAllocator()).allocate(
+        target_p, capability(), now_ns=110, maximum_age_ns=30,
+    )
+    assert result.feasible
+    assert len(result.active) == 1
+    assert result.active[0].value == pytest.approx(8.0)
+    assert result.reactive == ()
+
+
+def test_q_only_control_freezes_p_and_emits_no_active_setpoints() -> None:
+    target_q = JointPlantTarget(
+        active=None,
+        reactive=target(ControlQuantity.REACTIVE_POWER, -6.0),
+    )
+    result = JointPlantAllocator(JointPowerAllocator()).allocate(
+        target_q, capability(), now_ns=110, maximum_age_ns=30,
+    )
+    assert result.feasible
+    assert result.active == ()
+    assert result.reactive[0].value == pytest.approx(-6.0)
+
+
+def test_neither_control_function_is_rejected() -> None:
+    with pytest.raises(ValueError, match="requires P or Q"):
+        JointPlantTarget(active=None, reactive=None)
