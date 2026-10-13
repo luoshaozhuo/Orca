@@ -70,7 +70,7 @@ class WindHubWatchdog:
             self.redis_ok = True
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception:
             self.runtime.ready = False
             self.redis_ok = False
             try:
@@ -94,7 +94,7 @@ class WindHubWatchdog:
                 self._revision = revision
         except asyncio.CancelledError:
             raise
-        except Exception as exc:
+        except Exception:
             self.commander_ok = False
             self.point_mappings_ok = False
             self.runtime.ready = False
