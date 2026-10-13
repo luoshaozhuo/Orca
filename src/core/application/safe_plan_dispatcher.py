@@ -134,10 +134,7 @@ class SafePlanDispatcher:
                     "dispatch UNKNOWN cancellation command_id=%s device=%s point=%s",
                     command_id, binding.device_id, binding.point_id,
                 )
-                return DispatchReceipt(
-                    DispatchStatus.UNKNOWN, "Commander write cancelled; outcome unknown",
-                    tuple(submitted), confirmed,
-                )
+                raise
             except Exception as exc:
                 logger.warning(
                     "dispatch UNKNOWN command_id=%s device=%s point=%s error=%s",
