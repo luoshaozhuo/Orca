@@ -12,6 +12,7 @@ wind_hub:
     key_prefix: windhub
     username: orca
     password_env: ORCA_REDIS_PASSWORD
+    password_file: ~/.config/orca/redis/password
   collector:
     target: 127.0.0.1:50051
   commander:
