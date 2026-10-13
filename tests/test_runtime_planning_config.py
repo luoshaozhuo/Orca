@@ -19,8 +19,17 @@ def configuration(*, planning: dict | None = None) -> dict:
         "site": {"site_id": "test"},
         "wind_hub": {"collector": {"target": "127.0.0.1:50051"}},
         "resources": {
-            "poi": {"type": "poi"},
-            "wtg": {"type": "wind"},
+            "poi": {
+                "type": "poi",
+                "inputs": {"p": {"point_id": "active_power"}},
+            },
+            "wtg": {
+                "type": "wind",
+                "inputs": {
+                    "p": {"point_id": "active_power"},
+                    "q": {"point_id": "reactive_power"},
+                },
+            },
         },
         "controllers": {
             "agc": {
@@ -103,4 +112,18 @@ def test_storage_automatic_p_without_soc_mapping_is_rejected() -> None:
     payload = planning()
     payload["devices"][0]["technology"] = "storage"
     with pytest.raises(ValidationError, match="SOC mapping"):
+        OrcaConfig.model_validate(configuration(planning=payload))
+
+
+def test_unregistered_device_measurement_is_rejected() -> None:
+    payload = planning()
+    payload["devices"][0]["q_point"] = "unregistered"
+    with pytest.raises(ValidationError, match="measurement not registered"):
+        OrcaConfig.model_validate(configuration(planning=payload))
+
+
+def test_unregistered_poi_measurement_is_rejected() -> None:
+    payload = planning()
+    payload["poi_active_point"] = "unregistered"
+    with pytest.raises(ValidationError, match="POI measurement not registered"):
         OrcaConfig.model_validate(configuration(planning=payload))
