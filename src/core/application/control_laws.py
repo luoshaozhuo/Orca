@@ -82,7 +82,6 @@ class PIControlLaw:
     _integral: float = 0.0
     _previous_error: float | None = None
     _previous_unsaturated: float | None = None
-    _previous_achievable: float | None = None
     _previous_saturated: bool = False
 
     def __post_init__(self) -> None:
@@ -101,13 +100,6 @@ class PIControlLaw:
                 delta += self.kaw * (
                     sample.achievable - self._previous_unsaturated
                 )
-            elif (
-                self._previous_saturated
-                and self._previous_unsaturated is not None
-                and self._previous_achievable is not None
-            ):
-                # 当前没有新鲜的可实现反馈时，不使用历史估计。
-                delta = 0.0
             proposed = self._integral + delta
             raw = sample.feedforward + self.kp * error + proposed
             if sample.achievable is None and (
@@ -121,7 +113,6 @@ class PIControlLaw:
         result = _result(sample, raw, error)
         self._previous_error = error
         self._previous_unsaturated = raw
-        self._previous_achievable = sample.achievable
         self._previous_saturated = result.saturated
         return result
 
@@ -129,5 +120,4 @@ class PIControlLaw:
         self._integral = 0.0
         self._previous_error = None
         self._previous_unsaturated = None
-        self._previous_achievable = None
         self._previous_saturated = False
