@@ -83,6 +83,10 @@ class PlanningReferenceBinding:
     point_id: str
     valid_for_ns: int
 
+    def __post_init__(self) -> None:
+        if not self.resource_id or not self.point_id or self.valid_for_ns <= 0:
+            raise ValueError("invalid external planning reference binding")
+
 
 @dataclass(frozen=True, slots=True)
 class ActivePlanningBinding:
@@ -107,6 +111,11 @@ class ActivePlanningBinding:
             raise ValueError("planning requires unique devices")
         if not self.authorized_sources:
             raise ValueError("planning must explicitly authorize reference sources")
+        keys = [(ref.purpose, ref.source) for ref in self.reference_inputs]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate external planning reference")
+        if any(ref.source not in self.authorized_sources for ref in self.reference_inputs):
+            raise ValueError("external reference source is not authorized")
         if self.maximum_skew_ns <= 0:
             raise ValueError("planning maximum sample skew must be positive")
         if not all(math.isfinite(v) for v in (self.minimum, self.maximum, self.dt_s)):
