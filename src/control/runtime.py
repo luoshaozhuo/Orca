@@ -85,10 +85,10 @@ class ControlRuntime:
         for target in targets:
             if owner := self._authority.get(target):
                 raise RuntimeError(f"output {target} is already owned by task {owner}")
-        for target in targets:
-            self._authority[target] = task_id
         if self._reset_control_state is not None:
             self._reset_control_state(task_id)
+        for target in targets:
+            self._authority[target] = task_id
         self.states[task_id] = "RUNNING"
         self._workers[task_id] = asyncio.create_task(self._run_task(task_id))
 
