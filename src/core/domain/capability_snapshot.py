@@ -23,16 +23,22 @@ class DeviceCapabilityRecord:
     p_ramp: DeviceRampLimits | None = None
     q_ramp: DeviceRampLimits | None = None
     storage: StorageEnergyLimits | None = None
-    quality_good: bool = True
+    quality_good: bool = False
+    p_authorized: bool = False
+    q_authorized: bool = False
 
     def __post_init__(self) -> None:
         if self.timestamp_ns < 0 or self.generation < 0:
             raise ValueError("invalid device capability timestamp or generation")
-        if not isinstance(self.quality_good, bool):
-            raise ValueError("invalid capability quality flag")
+        if not all(
+            isinstance(flag, bool)
+            for flag in (self.quality_good, self.p_authorized, self.q_authorized)
+        ):
+            raise ValueError("invalid capability quality or authorization flag")
         if (
             self.capability.technology == DeviceTechnology.STORAGE
             and self.capability.p_auto
+            and self.p_authorized
             and self.storage is None
         ):
             raise ValueError("auto-controlled storage requires SOC energy limits")
@@ -90,7 +96,11 @@ class DeviceCapabilitySnapshot:
         """计算单周期可调边界；未获得完整数据不得推断能力。"""
         result: list[DevicePQCapability] = []
         for record in self.records:
-            item = record.capability
+            item = replace(
+                record.capability,
+                p_auto=record.capability.p_auto and record.p_authorized,
+                q_auto=record.capability.q_auto and record.q_authorized,
+            )
             p = DevicePowerCapability(
                 item.device_id, item.p_current, item.p_min, item.p_max,
                 item.p_auto,
