@@ -60,6 +60,8 @@ class SafePlanDispatcher:
             return "planning snapshot is from the future"
         if now_ns - result.acquired_at_ns > self._maximum_age_ns:
             return "planning snapshot expired"
+        if result.expires_at_ns is not None and now_ns >= result.expires_at_ns:
+            return "planning source expired"
         if not self._permitted(task_id):
             return "control authority revoked or output disabled"
         return None
