@@ -75,3 +75,17 @@ def test_low_pass_rejects_bad_timing() -> None:
     signal = LowPassSignal(tau_s=2.0)
     with pytest.raises(ValueError, match="period"):
         signal.step(50.0, 0.0)
+
+
+def test_pipeline_error_invalidates_ramp_state() -> None:
+    trajectory = RampTrajectory(up_per_s=2.0, down_per_s=2.0)
+    trajectory.initialize(100.0)
+    pipeline = ControlPipeline(
+        trajectory=trajectory,
+        law=ProportionalControlLaw(kp=1e308),
+        signal=PassthroughSignal(),
+    )
+    with pytest.raises(ValueError, match="non-finite"):
+        pipeline.evaluate(sample(110.0, 90.0))
+    with pytest.raises(RuntimeError, match="initialized"):
+        pipeline.evaluate(sample(110.0, 90.0))
