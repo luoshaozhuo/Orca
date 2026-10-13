@@ -216,8 +216,70 @@ class ControllerConfig(ConfigModel):
         return self
 
 
+class PlanningDeviceConfig(ConfigModel):
+    device_id: str = Field(min_length=1)
+    p_point: str = Field(min_length=1)
+    q_point: str = Field(min_length=1)
+    technology: str
+    p_min: float
+    p_max: float
+    q_min: float
+    q_max: float
+    s_max: float = Field(gt=0)
+    p_auto: bool = False
+    q_auto: bool = False
+    p_weight: float = Field(default=1.0, gt=0)
+    q_weight: float = Field(default=1.0, gt=0)
+
+    @model_validator(mode="after")
+    def validate_power_bounds(self) -> PlanningDeviceConfig:
+        values = (
+            self.p_min, self.p_max, self.q_min, self.q_max,
+            self.s_max, self.p_weight, self.q_weight,
+        )
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("planning device parameters must be finite")
+        if self.p_min > self.p_max or self.q_min > self.q_max:
+            raise ValueError("planning device capability limits are inverted")
+        if self.technology not in {"wind", "pv", "storage", "svg"}:
+            raise ValueError("unknown planning device technology")
+        if self.technology == "storage" and self.p_auto:
+            raise ValueError("storage automatic P requires a configured SOC mapping")
+        return self
+
+
+class ActivePlanningConfig(ConfigModel):
+    target: str = Field(min_length=1)
+    poi_device_id: str = Field(min_length=1)
+    poi_active_point: str = Field(min_length=1)
+    minimum: float
+    maximum: float
+    devices: tuple[PlanningDeviceConfig, ...] = Field(min_length=1)
+    authorized_sources: tuple[ReferenceSource, ...] = Field(min_length=1)
+    active_functions: tuple[CoordinationFunction, ...] = ()
+    maximum_skew_ns: int = Field(default=500_000_000, gt=0)
+
+    @model_validator(mode="after")
+    def validate_bindings(self) -> ActivePlanningConfig:
+        if not math.isfinite(self.minimum) or not math.isfinite(self.maximum):
+            raise ValueError("planning target limits must be finite")
+        if self.minimum > self.maximum:
+            raise ValueError("planning target limits are inverted")
+        names = [item.device_id for item in self.devices]
+        if len(names) != len(set(names)):
+            raise ValueError("duplicate planning device")
+        if len(self.authorized_sources) != len(set(self.authorized_sources)):
+            raise ValueError("duplicate planning reference source")
+        if len(self.active_functions) != len(set(self.active_functions)):
+            raise ValueError("duplicate planning control function")
+        if set(self.active_functions) - {CoordinationFunction.PFR, CoordinationFunction.IR}:
+            raise ValueError("planning active functions support PFR and IR only")
+        return self
+
+
 class TaskConfig(ConfigModel):
     controller_id: str
+    planning: ActivePlanningConfig | None = None
     interval: float = Field(gt=0)
     enabled: bool = True
     resource_ids: list[str] = Field(min_length=1)
@@ -390,6 +452,18 @@ class OrcaConfig(ConfigModel):
                 raise ValueError(f"task {name}: missing controller {task.controller_id}")
             if task.enabled and not self.controllers[task.controller_id].enabled:
                 raise ValueError(f"task {name}: controller disabled")
+            if task.planning is not None:
+                if self.controllers[task.controller_id].type.lower() != "agc":
+                    raise ValueError(f"task {name}: active planning requires AGC controller")
+                for device in task.planning.devices:
+                    if device.device_id not in task.resource_ids:
+                        raise ValueError(
+                            f"task {name}: planning device not in task resources"
+                        )
+                if task.planning.poi_device_id not in self.resources:
+                    raise ValueError(
+                        f"task {name}: planning POI resource is not configured"
+                    )
             for resource_id in task.resource_ids:
                 if resource_id not in self.resources:
                     raise ValueError(f"task {name}: unknown resource {resource_id}")
