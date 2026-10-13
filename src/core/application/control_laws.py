@@ -22,6 +22,8 @@ class ControlLaw(Protocol):
 
 
 def _result(sample: ControlLawInput, output: float, error: float) -> ControlLawResult:
+    if not math.isfinite(output) or not math.isfinite(error):
+        raise ValueError("control law produced a non-finite result")
     candidate = max(sample.minimum, min(sample.maximum, output))
     value = ControlValue(
         quantity=sample.reference.quantity,
@@ -107,6 +109,8 @@ class PIControlLaw:
                 or (raw < sample.minimum and delta < 0)
             ):
                 proposed = self._integral
+            if not math.isfinite(proposed):
+                raise ValueError("PI integral overflow")
             self._integral = proposed
 
         raw = sample.feedforward + self.kp * error + self._integral
