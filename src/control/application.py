@@ -38,7 +38,7 @@ from infrastructure.wind_hub.commander import CommanderClient
 from infrastructure.wind_hub.watchdog import WindHubWatchdog
 
 from .cycle import ControlCycle
-from .runtime import ControlRuntime
+from .runtime import ControlRuntime, TaskState
 
 
 class ControlApplication:
@@ -218,7 +218,7 @@ class ControlApplication:
         return (
             task_id in self.config.tasks
             and self.runtime.ready
-            and self.runtime.states[task_id] == "RUNNING"
+            and self.runtime.states[task_id] == TaskState.RUNNING
             and all(
                 self.runtime.control_authority.can_output(function)
                 for function in self.runtime.task_functions(task_id)
@@ -232,7 +232,7 @@ class ControlApplication:
     ) -> bool:
         if task_id not in self.config.tasks:
             return False
-        if not self.runtime.ready or self.runtime.states[task_id] != "RUNNING":
+        if not self.runtime.ready or self.runtime.states[task_id] != TaskState.RUNNING:
             return False
         if function == CoordinationFunction.PFR:
             control_function = ControlFunction.PFR
@@ -253,7 +253,7 @@ class ControlApplication:
         task = self.config.tasks[task_id]
         if device_id not in task.resource_ids:
             return False
-        if not self.runtime.ready or self.runtime.states[task_id] != "RUNNING":
+        if not self.runtime.ready or self.runtime.states[task_id] != TaskState.RUNNING:
             return False
         if quantity == ControlQuantity.ACTIVE_POWER:
             function = ControlFunction.AGC
@@ -300,15 +300,15 @@ class ControlApplication:
             raise PermissionError("pipeline change requires authorization")
         if task_id not in self.control_pipelines:
             raise ValueError(f"unknown or disabled pipeline task: {task_id}")
-        if self.runtime.states[task_id] != "STOPPED":
+        if self.runtime.states[task_id] != TaskState.STOPPED:
             raise RuntimeError("pipeline switch requires a stopped task")
         updated = build_control_pipeline(config)
         old = self.control_pipelines[task_id]
         old.reset()
         self.control_pipelines[task_id] = updated
         self.runtime.planning_results.pop(task_id, None)
-        planning = self.runtime._planning_cycle
-        if isinstance(planning, ReadOnlyPlanningCycle) and task_id in self.runtime._planning_tasks:
+        planning = self.runtime.planning_cycle_port
+        if isinstance(planning, ReadOnlyPlanningCycle) and task_id in self.runtime.planning_task_ids:
             planning.replace_controller(
                 task_id,
                 ActivePowerController(updated, self.active_power_coordinator),
@@ -351,11 +351,11 @@ class ControlApplication:
             "output_access_verified": self.watchdog.output_access_verified,
             "last_error": self.watchdog.last_error,
             "tasks": self.runtime.states.copy(),
-            "output_owners": {f"{device}/{point}": owner for (device, point), owner in self.runtime._authority.items()},
+            "output_owners": {f"{device}/{point}": owner for (device, point), owner in self.runtime.output_owners().items()},
             "task_reasons": self.runtime.reasons.copy(),
             "dispatch_write_enabled": self.runtime.write_enabled,
             "dispatch_blocks": self.runtime.dispatch_blocked.copy(),
-            "planning_tasks": sorted(self.runtime._planning_tasks),
+            "planning_tasks": sorted(self.runtime.planning_task_ids),
             "planning_results": {
                 task_id: {
                     "generation": result.allocation.generation,
@@ -364,7 +364,7 @@ class ControlApplication:
                     "reactive_setpoints": len(result.allocation.reactive),
                 }
                 for task_id, result in self.runtime.planning_results.items()
-                if self.runtime.ready and self.runtime.states[task_id] == "RUNNING"
+                if self.runtime.ready and self.runtime.states[task_id] == TaskState.RUNNING
                 and all(
                     self.runtime.control_authority.can_output(function)
                     for function in self.runtime.task_functions(task_id)

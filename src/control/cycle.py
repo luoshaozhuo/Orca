@@ -4,6 +4,7 @@ from __future__ import annotations
 import logging
 import math
 from collections.abc import Callable
+from typing import Any, Protocol
 from uuid import uuid4
 
 from core.application.port.command import CommandPort
@@ -16,13 +17,20 @@ from .decision import validate_decision
 logger = logging.getLogger(__name__)
 
 
+class LatestSource(Protocol):
+    async def latest(
+        self, pairs: list[tuple[str, str]]
+    ) -> dict[tuple[str, str], dict[str, Any]]:
+        ...
+
+
 class ControlCycle:
     """一次执行；不重试、不缓存指令、不补发。"""
 
     def __init__(
         self,
         config: OrcaConfig,
-        source: object,
+        source: LatestSource,
         commander: CommandPort,
         strategy: ControlStrategy,
     ) -> None:

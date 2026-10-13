@@ -30,3 +30,26 @@ markers = [
 
 [tool.ruff]
 line-length = 100
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["grpc", "grpc.*", "google.protobuf", "google.protobuf.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "infrastructure.wind_hub.rpc.collector_pb2",
+    "infrastructure.wind_hub.rpc.collector_pb2_grpc",
+    "infrastructure.wind_hub.rpc.commander_pb2",
+    "infrastructure.wind_hub.rpc.commander_pb2_grpc",
+]
+ignore_errors = true
+
+# pb2 消息类由 protobuf builder 在运行时生成，静态分析不可见。
+[[tool.mypy.overrides]]
+module = ["infrastructure.wind_hub.commander", "infrastructure.wind_hub.collector"]
+disable_error_code = ["attr-defined"]

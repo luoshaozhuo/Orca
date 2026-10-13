@@ -588,7 +588,8 @@ class CoordinationConfig(ConfigModel):
 class OrcaConfig(ConfigModel):
     site: SiteConfig
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
-    wind_hub: WindHubConfig = Field(default_factory=WindHubConfig)
+    # collector.target 无默认值，wind_hub 必须显式配置。
+    wind_hub: WindHubConfig
     resources: dict[str, ResourceConfig]
     controllers: dict[str, ControllerConfig]
     tasks: dict[str, TaskConfig]

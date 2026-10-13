@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from core.application.validation import validate_inputs
@@ -27,6 +28,13 @@ class LatestSource(Protocol):
 
 
 logger = logging.getLogger(__name__)
+
+
+class TaskState(StrEnum):
+    """任务生命周期状态；字符串值保持对外状态接口兼容。"""
+
+    STOPPED = "STOPPED"
+    RUNNING = "RUNNING"
 
 
 
@@ -60,7 +68,7 @@ class ControlRuntime:
         self._inflight_dispatch: set[str] = set()
         self.planning_results: dict[str, PlanningCycleResult] = {}
         self.write_enabled = False  # 现场写权限未验证；生产装配不得自动放开
-        self.states = {name: "STOPPED" for name in config.tasks}
+        self.states = {name: TaskState.STOPPED for name in config.tasks}
         self.reasons: dict[str, str] = {}
         self._workers: dict[str, asyncio.Task[None]] = {}
         self.ready = False
@@ -89,7 +97,7 @@ class ControlRuntime:
             and self.ready
             and bool(functions)
             and all(self.control_authority.can_output(f) for f in functions)
-            and self.states[task_id] == "RUNNING"
+            and self.states[task_id] == TaskState.RUNNING
             and task_id not in self.dispatch_blocked
         )
 
@@ -108,6 +116,20 @@ class ControlRuntime:
         """按物理输出测点查询当前控制任务。"""
         return self._authority.get((device_id, point_id))
 
+    def output_owners(self) -> dict[tuple[str, str], str]:
+        """全部输出测点归属的只读快照。"""
+        return dict(self._authority)
+
+    @property
+    def planning_cycle_port(self) -> PlanningCyclePort | None:
+        """已装配的规划周期端口；仅用于受控装配操作。"""
+        return self._planning_cycle
+
+    @property
+    def planning_task_ids(self) -> frozenset[str]:
+        """声明为规划任务的任务集合。"""
+        return self._planning_tasks
+
     async def start_task(self, task_id: str) -> None:
         if task_id not in self.states:
             raise ValueError(f"unknown task: {task_id}")
@@ -115,7 +137,7 @@ class ControlRuntime:
             raise ValueError(f"disabled task: {task_id}")
         if task_id in self.dispatch_blocked:
             raise RuntimeError("dispatch blocked: explicit clearance required")
-        if self.states[task_id] != "STOPPED":
+        if self.states[task_id] != TaskState.STOPPED:
             return
         if not self.ready:
             raise RuntimeError("dependencies or point mappings are not verified")
@@ -130,12 +152,12 @@ class ControlRuntime:
         self._reset_task_state(task_id)
         for target in targets:
             self._authority[target] = task_id
-        self.states[task_id] = "RUNNING"
+        self.states[task_id] = TaskState.RUNNING
         self._workers[task_id] = asyncio.create_task(self._run_task(task_id))
 
     def install_dispatcher(self, dispatcher: SafePlanDispatcher) -> None:
         """只能在全部任务停止且写入关闭时安装已校验执行器。"""
-        if self.write_enabled or any(state != "STOPPED" for state in self.states.values()):
+        if self.write_enabled or any(state != TaskState.STOPPED for state in self.states.values()):
             raise RuntimeError("dispatcher installation requires disabled writes and stopped tasks")
         self._dispatcher = dispatcher
 
@@ -143,7 +165,7 @@ class ControlRuntime:
         """仅任务停止后人工授权清除 UNKNOWN 闭锁，不自动补发。"""
         if not authorized:
             raise PermissionError("dispatch unblock requires authorization")
-        if task_id not in self.states or self.states[task_id] != "STOPPED":
+        if task_id not in self.states or self.states[task_id] != TaskState.STOPPED:
             raise RuntimeError("dispatch unblock requires stopped task")
         self.dispatch_blocked.pop(task_id, None)
 
@@ -172,7 +194,7 @@ class ControlRuntime:
                 await worker
             except asyncio.CancelledError:
                 pass
-        self.states[task_id] = "STOPPED"
+        self.states[task_id] = TaskState.STOPPED
         self._release_authority(task_id)
         self._reset_task_state(task_id)
 
@@ -261,6 +283,6 @@ class ControlRuntime:
             if task_id in self._inflight_dispatch:
                 self._block_dispatch(task_id, "in-flight command terminated; outcome UNKNOWN")
                 self._inflight_dispatch.discard(task_id)
-            self.states[task_id] = "STOPPED"
+            self.states[task_id] = TaskState.STOPPED
             self._release_authority(task_id)
             self._reset_task_state(task_id)

@@ -18,12 +18,14 @@ from core.domain.config import ControlPipelineConfig
 
 def build_control_pipeline(config: ControlPipelineConfig) -> ControlPipeline:
     """装配无 I/O 的控制管线；不隐式初始化参考轨迹。"""
+    signal: LowPassSignal | PassthroughSignal
     if config.signal.algorithm == "low_pass":
         assert config.signal.tau_s is not None
         signal = LowPassSignal(tau_s=config.signal.tau_s)
     else:
         signal = PassthroughSignal()
 
+    trajectory: PassthroughTrajectory | RampTrajectory
     if config.trajectory.algorithm == "ramp":
         assert config.trajectory.up_per_s is not None
         assert config.trajectory.down_per_s is not None
@@ -34,6 +36,7 @@ def build_control_pipeline(config: ControlPipelineConfig) -> ControlPipeline:
     else:
         trajectory = PassthroughTrajectory()
 
+    law: PIControlLaw | ProportionalControlLaw | ActiveLimitLaw | DirectControlLaw
     if config.law.algorithm == "pi":
         assert config.law.kp is not None
         assert config.law.ki is not None
