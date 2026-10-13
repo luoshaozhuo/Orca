@@ -62,7 +62,7 @@ def references() -> ReferenceManager:
             ),
             timestamp_ns=now - 1_000_000_000,
             valid_until_ns=now + 10_000_000_000,
-            generation=0,
+            generation=7,
         )
     )
     return result
@@ -137,4 +137,15 @@ async def test_redis_failure_is_not_suppressed() -> None:
         references(), bindings(), generation=7, maximum_age_ns=2_000_000_000,
     )
     with pytest.raises(ConnectionError, match="redis unavailable"):
+        await provider.acquire("active")
+
+
+@pytest.mark.asyncio
+async def test_reference_generation_mismatch_blocks_snapshot() -> None:
+    provider = RedisPlanningSnapshotSource(
+        MockMeasurements(values()), references(), bindings(),
+        generation=8, maximum_age_ns=2_000_000_000,
+        can_plan=lambda task, device, quantity: True,
+    )
+    with pytest.raises(ValueError, match="reference generation mismatch"):
         await provider.acquire("active")
