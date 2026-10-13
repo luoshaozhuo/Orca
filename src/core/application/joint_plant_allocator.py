@@ -1,7 +1,6 @@
 """双目标设备分配应用服务，唯一输入为冻结后的能力快照。"""
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 
 from core.application.joint_power_allocator import (
