@@ -304,6 +304,8 @@ class ControlApplication:
             "tasks": self.runtime.states.copy(),
             "output_owners": {f"{device}/{point}": owner for (device, point), owner in self.runtime._authority.items()},
             "task_reasons": self.runtime.reasons.copy(),
+            "dispatch_write_enabled": self.runtime.write_enabled,
+            "dispatch_blocks": self.runtime.dispatch_blocked.copy(),
             "planning_tasks": sorted(self.runtime._planning_tasks),
             "planning_results": {
                 task_id: {
