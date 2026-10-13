@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from core.domain.config import OrcaConfig
 from core.domain.control_authority import ControlAuthority, ControlFunction
@@ -14,6 +14,13 @@ from .cycle import ControlCycle
 if TYPE_CHECKING:
     from core.application.read_only_planning_cycle import PlanningCyclePort
     from core.application.safe_plan_dispatcher import SafePlanDispatcher
+
+class LatestSource(Protocol):
+    async def latest(
+        self, pairs: list[tuple[str, str]]
+    ) -> dict[tuple[str, str], dict[str, Any]]:
+        ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -211,17 +218,17 @@ class ControlRuntime:
                                 continue
                         self.reasons.pop(task_id, None)
                     elif self.cycle is not None:
-                        reason = await self.cycle.execute(
+                        cycle_reason = await self.cycle.execute(
                             task_id,
                             can_write=lambda: self._can_write_task(task_id),
                         )
-                        if reason:
-                            self.reasons[task_id] = reason
+                        if cycle_reason:
+                            self.reasons[task_id] = cycle_reason
                             self._reset_task_state(task_id)
                         else:
                             self.reasons.pop(task_id, None)
                     else:
-                        records = await self.source.latest(pairs)
+                        records = await cast(LatestSource, self.source).latest(pairs)
                         errors = validate_inputs(self.config, task_id, records)
                         if errors:
                             self.reasons[task_id] = "; ".join(errors)
