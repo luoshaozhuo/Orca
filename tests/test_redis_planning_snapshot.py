@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from time import time_ns
 from dataclasses import replace
 
 import pytest
@@ -261,3 +262,46 @@ async def test_expired_external_reference_is_rejected() -> None:
     )
     with pytest.raises(ValueError, match="stale"):
         await provider.acquire("active")
+
+
+@pytest.mark.asyncio
+async def test_reference_batch_failure_does_not_partially_replace_base() -> None:
+    records = values()
+    stamp = records[("poi", "p")]["timestamp"]
+    records[("grid", "base")] = {
+        "value": 7.0, "quality": "good", "timestamp": stamp,
+    }
+    records[("grid", "pfr")] = {
+        "value": 2.0, "quality": "good", "timestamp": stamp,
+    }
+    manager = references()
+    before = manager.current(
+        ReferencePurpose.ACTIVE_BASE, "POI",
+        now_ns=time_ns(),
+        authorized_sources=frozenset({ReferenceSource.GRID}),
+    )
+    original = bindings()["active"]
+    ref_bindings = (
+        PlanningReferenceBinding(
+            ReferencePurpose.ACTIVE_BASE, ReferenceSource.GRID,
+            "grid", "base", 2_000_000_000,
+        ),
+        PlanningReferenceBinding(
+            ReferencePurpose.PFR_DELTA, ReferenceSource.GRID,
+            "grid", "pfr", 2_000_000_000,
+        ),
+    )
+    provider = RedisPlanningSnapshotSource(
+        MockMeasurements(records), manager,
+        {"active": replace(original, reference_inputs=ref_bindings)},
+        generation=7, maximum_age_ns=2_000_000_000,
+    )
+    with pytest.raises(ValueError, match="unconfigured reference"):
+        await provider.acquire("active")
+    after = manager.current(
+        ReferencePurpose.ACTIVE_BASE, "POI",
+        now_ns=__import__("time").time_ns(),
+        authorized_sources=frozenset({ReferenceSource.GRID}),
+    )
+    assert before is not None and after is not None
+    assert before.control.value == after.control.value == 6.0
