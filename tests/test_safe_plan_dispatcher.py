@@ -146,9 +146,8 @@ async def test_inflight_cancellation_is_unknown_without_retry() -> None:
             raise asyncio.CancelledError()
 
     commander = CancelledCommander()
-    receipt = await dispatcher(commander).dispatch("agc", plan(second=True))
-    assert receipt.status == DispatchStatus.UNKNOWN
-    assert receipt.confirmed == 0
+    with pytest.raises(asyncio.CancelledError):
+        await dispatcher(commander).dispatch("agc", plan(second=True))
     assert len(commander.calls) == 1
 
 
