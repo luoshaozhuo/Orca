@@ -136,6 +136,7 @@ class RedisPlanningSnapshotSource:
         generation: int,
         maximum_age_ns: int,
         can_plan: Callable[[str, str, ControlQuantity], bool] | None = None,
+        can_contribute: Callable[[str, CoordinationFunction], bool] | None = None,
     ) -> None:
         if generation < 0 or maximum_age_ns <= 0:
             raise ValueError("invalid planning generation or age")
@@ -145,6 +146,7 @@ class RedisPlanningSnapshotSource:
         self._generation = generation
         self._maximum_age_ns = maximum_age_ns
         self._can_plan = can_plan
+        self._can_contribute = can_contribute
         self._last_reference: dict[tuple[str, ReferencePurpose, ReferenceSource], tuple[int, float]] = {}
 
     @staticmethod
@@ -237,6 +239,11 @@ class RedisPlanningSnapshotSource:
             ControlValueRole.MEASUREMENT, ControlValueKind.ABSOLUTE,
             measured[pairs[0]], "MW",
         )
+        for function in binding.active_functions:
+            if self._can_contribute is None or not self._can_contribute(task_id, function):
+                raise ValueError(
+                    f"{function.value}: control contribution not authorized"
+                )
         cycle = active_power_cycle_from_references(
             self._references,
             target=binding.target,
