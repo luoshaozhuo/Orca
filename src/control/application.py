@@ -17,6 +17,12 @@ from core.application.control_pipeline_factory import build_control_pipeline
 from core.application.internal_reference import InternalReferenceService
 from core.application.reference_manager import ReferenceManager
 from core.domain.config import OrcaConfig
+from core.domain.control_authority import ControlFunction
+from core.domain.control_value import ControlQuantity
+from infrastructure.redis.planning_snapshot import (
+    ActivePlanningBinding,
+    RedisPlanningSnapshotSource,
+)
 from .runtime import ControlRuntime
 from .cycle import ControlCycle
 from algorithms.noop import NoOpStrategy
@@ -32,6 +38,7 @@ class ControlApplication:
         *,
         planning_snapshots: PlanningSnapshotPort | None = None,
         planning_tasks: frozenset[str] = frozenset(),
+        planning_bindings: dict[str, ActivePlanningBinding] | None = None,
     ) -> None:
         self.config = config
         self.references = ReferenceManager.from_controllers(config.controllers)
@@ -52,6 +59,19 @@ class ControlApplication:
         if any(controller.enabled and controller.strategy != "noop" for controller in config.controllers.values()):
             raise ValueError("unsupported strategy: only noop is available before field commissioning")
         self.cycle = ControlCycle(config, self.redis, self.commander, NoOpStrategy())
+        if planning_bindings is not None and planning_snapshots is not None:
+            raise ValueError("select a single planning snapshot source")
+        if planning_bindings is not None:
+            if set(planning_bindings) != planning_tasks:
+                raise ValueError("planning bindings must match planning tasks")
+            planning_snapshots = RedisPlanningSnapshotSource(
+                self.redis,
+                self.references,
+                planning_bindings,
+                generation=0,
+                maximum_age_ns=int(config.wind_hub.watchdog.interval * 1e9),
+                can_plan=self._can_plan_device,
+            )
         if planning_tasks and planning_snapshots is None:
             raise ValueError("planning tasks require an authorized snapshot source")
         if planning_tasks - set(self.control_pipelines):
@@ -82,6 +102,24 @@ class ControlApplication:
         self.watchdog = WindHubWatchdog(config, self.runtime, self.redis, self.commander)
         self._server: asyncio.AbstractServer | None = None
         self._socket = Path(config.runtime.socket_path)
+
+    def _can_plan_device(
+        self,
+        task_id: str,
+        device_id: str,
+        quantity: ControlQuantity,
+    ) -> bool:
+        if task_id not in self.config.tasks:
+            return False
+        task = self.config.tasks[task_id]
+        if device_id not in task.resource_ids:
+            return False
+        function = (
+            ControlFunction.AGC
+            if quantity == ControlQuantity.ACTIVE_POWER
+            else ControlFunction.AVC
+        )
+        return self.runtime.control_authority.can_output(function)
 
     def _reset_control_state(self, task_id: str) -> None:
         pipeline = self.control_pipelines.get(task_id)
