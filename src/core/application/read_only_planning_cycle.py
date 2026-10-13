@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from core.application.active_power_controller import ActivePowerController
+from core.application.control_trajectory import RampTrajectory
 from core.application.joint_power_allocator import JointAllocationResult, JointPowerAllocator
 from core.application.port.planning_snapshot import PlanningSnapshotPort
 
@@ -58,6 +59,11 @@ class ReadOnlyPlanningCycle:
                 or started_at_ns - snapshot.acquired_at_ns > self._maximum_age_ns
             ):
                 raise ValueError("planning observation snapshot is stale")
+            # 轨迹只能用已通过快照门禁的实际功率初始化，不假定零输出。
+            ramp = controller.pipeline.trajectory
+            if isinstance(ramp, RampTrajectory) and not ramp.initialized:
+                snapshot.active.law_input()
+                ramp.initialize(snapshot.active.measurement.value)
             control = controller.evaluate(snapshot.active)
             allocation = self._allocator.allocate(
                 snapshot.devices,
