@@ -23,7 +23,10 @@ from core.domain.control_value import (
     ControlValueRole,
 )
 from core.domain.coordination import CoordinationFunction
-from core.domain.device_capability import DevicePQCapability, DeviceTechnology
+from core.domain.device_capability import (
+    DevicePQCapability, DeviceTechnology, StorageEnergyLimits,
+)
+from core.domain.device_ramp import DeviceRampLimits
 from core.domain.reference import ReferenceSource
 
 
@@ -34,6 +37,16 @@ class MeasurementSource(Protocol):
     ) -> dict[tuple[str, str], dict[str, Any]]:
         """原子批次获取最新测点记录；带质量及设备采样时标。"""
         ...
+
+
+@dataclass(frozen=True, slots=True)
+class StoragePlanningBinding:
+    soc_point: str
+    soc_min: float
+    soc_max: float
+    energy_mwh: float
+    charge_efficiency: float
+    discharge_efficiency: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +66,11 @@ class DevicePlanningBinding:
     q_auto: bool = False
     p_weight: float = 1.0
     q_weight: float = 1.0
+    p_ramp_up: float | None = None
+    p_ramp_down: float | None = None
+    q_ramp_up: float | None = None
+    q_ramp_down: float | None = None
+    storage: StoragePlanningBinding | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +151,8 @@ class RedisPlanningSnapshotSource:
         pairs = [(binding.poi_device_id, binding.poi_active_point)]
         for device in binding.devices:
             pairs.extend(((device.device_id, device.p_point), (device.device_id, device.q_point)))
+            if device.storage is not None:
+                pairs.append((device.device_id, device.storage.soc_point))
         if len(set(pairs)) != len(pairs):
             raise ValueError("duplicate planning measurement mapping")
         records = await self._source.latest(pairs)
@@ -189,8 +209,38 @@ class RedisPlanningSnapshotSource:
                 timestamp_ns=min(
                     timestamps[pairs.index((device.device_id, device.p_point))],
                     timestamps[pairs.index((device.device_id, device.q_point))],
+                    *(
+                        (timestamps[pairs.index((device.device_id, device.storage.soc_point))],)
+                        if device.storage is not None else ()
+                    ),
                 ),
                 generation=self._generation,
+                storage=(
+                    StorageEnergyLimits(
+                        soc=measured[(device.device_id, device.storage.soc_point)],
+                        soc_min=device.storage.soc_min,
+                        soc_max=device.storage.soc_max,
+                        energy_mwh=device.storage.energy_mwh,
+                        charge_efficiency=device.storage.charge_efficiency,
+                        discharge_efficiency=device.storage.discharge_efficiency,
+                        horizon_s=binding.dt_s,
+                    )
+                    if device.storage is not None else None
+                ),
+                p_ramp=(
+                    DeviceRampLimits(
+                        device.p_ramp_up, device.p_ramp_down, binding.dt_s,
+                    )
+                    if device.p_ramp_up is not None and device.p_ramp_down is not None
+                    else None
+                ),
+                q_ramp=(
+                    DeviceRampLimits(
+                        device.q_ramp_up, device.q_ramp_down, binding.dt_s,
+                    )
+                    if device.q_ramp_up is not None and device.q_ramp_down is not None
+                    else None
+                ),
                 quality_good=True,
                 p_authorized=(
                     self._can_plan is not None
