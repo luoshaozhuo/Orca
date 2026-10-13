@@ -78,32 +78,43 @@ class JointPowerAllocator:
         self,
         snapshot: DeviceCapabilitySnapshot,
         *,
-        p_target: float,
-        q_target: float,
+        p_target: float | None,
+        q_target: float | None,
         now_ns: int,
         maximum_age_ns: int,
         tolerance: float = 1e-6,
         max_iterations: int = 3000,
     ) -> JointAllocationResult:
         snapshot.validate(now_ns=now_ns, maximum_age_ns=maximum_age_ns)
-        if not all(math.isfinite(v) for v in (p_target, q_target, tolerance)):
+        if p_target is None and q_target is None:
+            raise ValueError("joint allocation requires an active P or Q target")
+        if not all(
+            math.isfinite(v) for v in (p_target, q_target, tolerance)
+            if v is not None
+        ):
             raise ValueError("non-finite joint allocation input")
         if tolerance <= 0 or max_iterations <= 0:
             raise ValueError("invalid joint allocation precision")
         devices = snapshot.bounded()
         n = len(devices)
+        control_p = p_target is not None
+        control_q = q_target is not None
         if not n:
             raise ValueError("joint allocation requires device capabilities")
 
+        if p_target is None:
+            p_target = math.fsum(item.p_current for item in devices)
+        if q_target is None:
+            q_target = math.fsum(item.q_current for item in devices)
         bounds: list[tuple[float, float, float, float, float]] = []
         for device in devices:
             pl, ph = (
                 (device.p_min, device.p_max)
-                if device.p_auto else (device.p_current, device.p_current)
+                if device.p_auto and control_p else (device.p_current, device.p_current)
             )
             ql, qh = (
                 (device.q_min, device.q_max)
-                if device.q_auto else (device.q_current, device.q_current)
+                if device.q_auto and control_q else (device.q_current, device.q_current)
             )
             bounds.append((pl, ph, ql, qh, device.s_max))
 
@@ -129,8 +140,8 @@ class JointPowerAllocator:
             )
 
         # 全场投影要求严格守恒，投影中只有可自动调节的维度参与修正。
-        movable_p = [i for i, item in enumerate(devices) if item.p_auto]
-        movable_q = [i for i, item in enumerate(devices) if item.q_auto]
+        movable_p = [i for i, item in enumerate(devices) if item.p_auto and control_p]
+        movable_q = [i for i, item in enumerate(devices) if item.q_auto and control_q]
         p = [item.p_current for item in devices]
         q = [item.q_current for item in devices]
         correction_p = [0.0] * n
@@ -210,7 +221,7 @@ class JointPowerAllocator:
                 device.device_id, ControlValueRole.DEVICE_SETPOINT,
                 ControlValueKind.ABSOLUTE, p[i], "MW",
             )
-            for i, device in enumerate(devices) if device.p_auto
+            for i, device in enumerate(devices) if device.p_auto and control_p
         )
         reactive = tuple(
             ControlValue(
@@ -218,7 +229,7 @@ class JointPowerAllocator:
                 device.device_id, ControlValueRole.DEVICE_SETPOINT,
                 ControlValueKind.ABSOLUTE, q[i], "Mvar",
             )
-            for i, device in enumerate(devices) if device.q_auto
+            for i, device in enumerate(devices) if device.q_auto and control_q
         )
         return JointAllocationResult(
             active=active, reactive=reactive,
