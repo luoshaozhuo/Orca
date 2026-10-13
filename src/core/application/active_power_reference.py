@@ -23,6 +23,7 @@ def active_power_cycle_from_references(
     feedforward: float = 0.0,
     achievable: float | None = None,
     active_functions: frozenset[CoordinationFunction] = frozenset(),
+    required_generation: int | None = None,
 ) -> ActivePowerCycle:
     """基于同一时刻的有效参考建立快照；缺失已启用功能立即闭锁。"""
     base = references.current(
@@ -33,6 +34,8 @@ def active_power_cycle_from_references(
     )
     if base is None:
         raise ValueError("active base reference unavailable or unauthorized")
+    if required_generation is not None and base.generation != required_generation:
+        raise ValueError("active base reference generation mismatch")
 
     mappings = {
         CoordinationFunction.PFR: ReferencePurpose.PFR_DELTA,
@@ -50,6 +53,8 @@ def active_power_cycle_from_references(
         )
         if sample is None:
             raise ValueError(f"{function.value} reference unavailable or unauthorized")
+        if required_generation is not None and sample.generation != required_generation:
+            raise ValueError(f"{function.value} reference generation mismatch")
         demands.append(
             ControlDemand(
                 function=function,
