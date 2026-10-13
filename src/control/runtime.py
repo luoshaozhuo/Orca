@@ -5,6 +5,7 @@ import asyncio
 import logging
 
 from core.domain.config import OrcaConfig
+from core.domain.control_authority import ControlAuthority, ControlFunction
 from core.application.validation import validate_inputs
 from .cycle import ControlCycle
 
@@ -16,6 +17,7 @@ class ControlRuntime:
 
     def __init__(self, config: OrcaConfig, source: object, cycle: ControlCycle | None = None) -> None:
         self.config = config
+        self.control_authority = ControlAuthority()
         self.source = source
         self.cycle = cycle
         self.write_enabled = False  # 现场写权限未验证；生产装配不得自动放开
@@ -24,6 +26,34 @@ class ControlRuntime:
         self._workers: dict[str, asyncio.Task[None]] = {}
         self.ready = False
         self._authority: dict[tuple[str, str], str] = {}
+
+    def _function_for(self, task_id: str) -> ControlFunction | None:
+        controller = self.config.controllers[self.config.tasks[task_id].controller_id]
+        try:
+            return ControlFunction(controller.type.upper())
+        except ValueError:
+            return None
+
+    def _can_write_task(self, task_id: str) -> bool:
+        function = self._function_for(task_id)
+        return (
+            self.write_enabled
+            and self.ready
+            and function is not None
+            and self.control_authority.can_output(function)
+            and self.states[task_id] == "RUNNING"
+        )
+
+    async def enter_manual(self, *, authorized: bool) -> None:
+        """停止所有自动任务、释放资源后才可移交人工控制权。"""
+        if not authorized:
+            raise PermissionError("manual handover requires authorization")
+        if any(self.control_authority.in_service(f) for f in ControlFunction):
+            raise RuntimeError("all automatic functions must be out of service")
+        await self.stop()
+        self.control_authority.enter_manual(
+            authorized=True, outputs_released=not self._authority,
+        )
 
     def output_owner(self, device_id: str, point_id: str) -> str | None:
         """按物理输出测点查询当前控制任务。"""
@@ -94,7 +124,7 @@ class ControlRuntime:
                     if self.cycle is not None:
                         reason = await self.cycle.execute(
                             task_id,
-                            can_write=lambda: self.write_enabled and self.ready,
+                            can_write=lambda: self._can_write_task(task_id),
                         )
                         if reason:
                             self.reasons[task_id] = reason

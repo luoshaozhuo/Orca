@@ -9,6 +9,8 @@ from infrastructure.wind_hub.commander import CommanderClient
 from infrastructure.redis.source import RedisSource
 
 from core.domain.config import OrcaConfig
+from core.application.reference_manager import ReferenceManager
+from core.application.internal_reference import InternalReferenceService
 from .runtime import ControlRuntime
 from .cycle import ControlCycle
 from algorithms.noop import NoOpStrategy
@@ -20,6 +22,7 @@ class ControlApplication:
 
     def __init__(self, config: OrcaConfig) -> None:
         self.config = config
+        self.references = ReferenceManager.from_controllers(config.controllers)
         timeout = config.wind_hub.watchdog.timeout
         self.redis = RedisSource(config.wind_hub.redis, timeout)
         self.commander = CommanderClient(config.wind_hub.commander.target, timeout)
@@ -27,6 +30,9 @@ class ControlApplication:
             raise ValueError("unsupported strategy: only noop is available before field commissioning")
         self.cycle = ControlCycle(config, self.redis, self.commander, NoOpStrategy())
         self.runtime = ControlRuntime(config, self.redis, self.cycle)
+        self.internal_references = InternalReferenceService(
+            self.references, self.runtime.control_authority,
+        )
         self.watchdog = WindHubWatchdog(config, self.runtime, self.redis, self.commander)
         self._server: asyncio.AbstractServer | None = None
         self._socket = Path(config.runtime.socket_path)
@@ -64,6 +70,15 @@ class ControlApplication:
             "tasks": self.runtime.states.copy(),
             "output_owners": {f"{device}/{point}": owner for (device, point), owner in self.runtime._authority.items()},
             "task_reasons": self.runtime.reasons.copy(),
+            "authority_mode": self.runtime.control_authority.mode.value,
+            "control_functions": {
+                function.value: {
+                    "service": self.runtime.control_authority.functions[function].value,
+                    "blocked": sorted(self.runtime.control_authority.blocks[function]),
+                    "can_output": self.runtime.control_authority.can_output(function),
+                }
+                for function in self.runtime.control_authority.functions
+            },
         }
 
     async def _handle(

@@ -3,3 +3,8 @@ controllers:
     type: agc
     strategy: noop
     enabled: true
+    references:
+      - purpose: ACTIVE_BASE
+        target: POI
+        mode: FIXED
+        primary: GRID

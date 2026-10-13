@@ -5,6 +5,8 @@ import math
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from core.domain.reference import ArbitrationMode, ReferencePurpose, ReferenceSelection, ReferenceSource
+
 
 class ConfigModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -82,10 +84,46 @@ class ResourceConfig(ConfigModel):
     outputs: dict[str, OutputConfig] = Field(default_factory=dict)
 
 
+class ReferencePolicyConfig(ConfigModel):
+    purpose: ReferencePurpose
+    target: str = Field(min_length=1)
+    mode: ArbitrationMode = ArbitrationMode.FIXED
+    primary: ReferenceSource
+    backups: tuple[ReferenceSource, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> ReferencePolicyConfig:
+        ReferenceSelection(
+            purpose=self.purpose,
+            target=self.target,
+            mode=self.mode,
+            primary=self.primary,
+            backups=self.backups,
+        )
+        return self
+
+    def to_selection(self) -> ReferenceSelection:
+        return ReferenceSelection(
+            purpose=self.purpose,
+            target=self.target,
+            mode=self.mode,
+            primary=self.primary,
+            backups=self.backups,
+        )
+
+
 class ControllerConfig(ConfigModel):
     type: str = Field(min_length=1)
     strategy: str = Field(min_length=1)
     enabled: bool = True
+    references: tuple[ReferencePolicyConfig, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_reference_keys(self) -> ControllerConfig:
+        keys = [(policy.purpose, policy.target) for policy in self.references]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate controller reference policy")
+        return self
 
 
 class TaskConfig(ConfigModel):
