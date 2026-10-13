@@ -35,6 +35,9 @@ def snapshot(*records: DeviceCapabilityRecord) -> DeviceCapabilitySnapshot:
 
 
 def record(item: DevicePQCapability, **kwargs) -> DeviceCapabilityRecord:
+    kwargs.setdefault("quality_good", True)
+    kwargs.setdefault("p_authorized", True)
+    kwargs.setdefault("q_authorized", True)
     return DeviceCapabilityRecord(
         capability=item, timestamp_ns=90, generation=7, **kwargs,
     )
@@ -212,3 +215,35 @@ def test_q_only_cannot_violate_fixed_active_output() -> None:
     )
     assert not result.feasible
     assert result.active == result.reactive == ()
+
+
+def test_absent_write_authorization_prevents_power_setpoints() -> None:
+    s = snapshot(
+        DeviceCapabilityRecord(
+            capability=device("wtg"),
+            timestamp_ns=90,
+            generation=7,
+            quality_good=True,
+        )
+    )
+    result = solve(s, 2.0, 0.0)
+    assert not result.feasible
+    assert not result.active
+    assert not result.reactive
+
+
+def test_one_channel_authorization_does_not_enable_other_channel() -> None:
+    s = snapshot(
+        DeviceCapabilityRecord(
+            capability=device("wtg"),
+            timestamp_ns=90,
+            generation=7,
+            quality_good=True,
+            p_authorized=True,
+            q_authorized=False,
+        )
+    )
+    result = solve(s, 2.0, 0.0)
+    assert result.feasible
+    assert len(result.active) == 1
+    assert not result.reactive
