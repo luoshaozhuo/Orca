@@ -1,7 +1,12 @@
 """故障后持续闭锁与人工清除的 Runtime 生命周期测试。"""
 from __future__ import annotations
 
+import asyncio
+from dataclasses import dataclass
+
 import pytest
+
+from core.domain.safe_dispatch import DispatchReceipt, DispatchStatus
 
 from control.runtime import ControlRuntime
 from core.domain.config import OrcaConfig
@@ -59,3 +64,55 @@ def test_dispatcher_installation_fails_if_writes_enabled() -> None:
     runtime.write_enabled = True
     with pytest.raises(RuntimeError, match="disabled writes"):
         runtime.install_dispatcher(object())  # type: ignore[arg-type]
+
+
+@dataclass
+class PlanningCycle:
+    calls: int = 0
+
+    async def execute(self, task_id: str) -> object:
+        self.calls += 1
+        return {"candidate": True}
+
+    def reset(self, task_id: str) -> None:
+        return None
+
+
+@dataclass
+class UnknownDispatcher:
+    calls: int = 0
+
+    async def dispatch(self, task_id: str, result: object) -> DispatchReceipt:
+        self.calls += 1
+        return DispatchReceipt(
+            DispatchStatus.UNKNOWN,
+            "write timed out",
+            ("unique-command-id",),
+        )
+
+
+@pytest.mark.asyncio
+async def test_unknown_result_disables_writes_and_prevents_new_cycles() -> None:
+    planning = PlanningCycle()
+    dispatcher = UnknownDispatcher()
+    runtime = ControlRuntime(
+        config(),
+        object(),
+        planning_cycle=planning,
+        planning_tasks=frozenset({"active"}),
+        dispatcher=dispatcher,  # type: ignore[arg-type]
+    )
+    runtime.ready = True
+    runtime.write_enabled = True
+    await runtime.start_task("active")
+    try:
+        await asyncio.sleep(0.045)
+        assert dispatcher.calls == 1
+        assert planning.calls == 1
+        assert not runtime.write_enabled
+        assert "active" in runtime.dispatch_blocked
+        assert "UNKNOWN" in runtime.reasons["active"]
+    finally:
+        await runtime.stop_task("active")
+    with pytest.raises(RuntimeError, match="dispatch blocked"):
+        await runtime.start_task("active")
