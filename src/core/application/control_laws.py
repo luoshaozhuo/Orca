@@ -95,6 +95,8 @@ class PIControlLaw:
         error = sample.reference.value - sample.measurement.value
         if self._previous_error is not None:
             delta = self.ki * sample.dt_s * self._previous_error
+            if not math.isfinite(delta):
+                raise ValueError("PI integral overflow")
             if (
                 sample.achievable is not None
                 and self._previous_unsaturated is not None
@@ -103,7 +105,11 @@ class PIControlLaw:
                     sample.achievable - self._previous_unsaturated
                 )
             proposed = self._integral + delta
+            if not math.isfinite(proposed):
+                raise ValueError("PI integral overflow")
             raw = sample.feedforward + self.kp * error + proposed
+            if not math.isfinite(raw):
+                raise ValueError("PI control output overflow")
             if sample.achievable is None and (
                 (raw > sample.maximum and delta > 0)
                 or (raw < sample.minimum and delta < 0)
