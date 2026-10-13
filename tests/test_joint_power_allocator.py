@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import random
+from dataclasses import replace
 
 import pytest
 
@@ -247,3 +248,29 @@ def test_one_channel_authorization_does_not_enable_other_channel() -> None:
     assert result.feasible
     assert len(result.active) == 1
     assert not result.reactive
+
+
+def test_joint_allocator_respects_active_power_weights() -> None:
+    s = snapshot(
+        record(replace(device("high"), p_weight=2.0)),
+        record(replace(device("low"), p_weight=1.0)),
+    )
+    result = solve(s, 6.0, 0.0)
+    assert result.feasible
+    assert {item.target: item.value for item in result.active} == pytest.approx(
+        {"high": 4.0, "low": 2.0}
+    )
+
+
+def test_joint_allocator_respects_reactive_power_weights() -> None:
+    from dataclasses import replace
+
+    s = snapshot(
+        record(replace(device("high"), q_weight=3.0)),
+        record(replace(device("low"), q_weight=1.0)),
+    )
+    result = solve(s, 0.0, 8.0)
+    assert result.feasible
+    assert {item.target: item.value for item in result.reactive} == pytest.approx(
+        {"high": 6.0, "low": 2.0}
+    )
