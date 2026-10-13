@@ -77,7 +77,7 @@ class RedisSource:
             payload = json.loads(raw)
             if not isinstance(payload, dict) or not {"value", "quality", "timestamp"} <= payload.keys():
                 raise ValueError(f"malformed Redis record for {pair}")
-            datetime.fromisoformat(str(payload["timestamp"]).replace("Z", "+00:00"))
+            datetime.fromisoformat(str(payload["timestamp"]))
             result[pair] = payload
         return result
 

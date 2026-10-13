@@ -159,12 +159,12 @@ class RedisPlanningSnapshotSource:
             raise ValueError(f"{key}: bad measurement quality")
         number = record.get("value")
         if isinstance(number, bool) or not isinstance(number, (int, float)):
-            raise ValueError(f"{key}: numeric measurement required")
+            raise ValueError(f"{key}: numeric measurement required")  # noqa: TRY004 - existing validation API
         reading = float(number)
         if not math.isfinite(reading):
             raise ValueError(f"{key}: non-finite measurement")
         try:
-            timestamp = datetime.fromisoformat(str(record["timestamp"]).replace("Z", "+00:00"))
+            timestamp = datetime.fromisoformat(str(record["timestamp"]))
             if timestamp.utcoffset() is None:
                 raise ValueError("naive measurement timestamp")
             stamp_ns = int(timestamp.timestamp() * 1_000_000_000)

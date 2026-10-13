@@ -83,7 +83,7 @@ class ControlCycle:
                 outcome = await self.commander.write_once(
                     command_id, item.device_id, point_id, item.value
                 )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - command outcome may be unknown
                 # 包括超时：执行结果可能未知，不再发送同一命令。
                 logger.warning("command UNKNOWN id=%s target=%s/%s error=%s",
                                command_id, item.device_id, point_id, exc)

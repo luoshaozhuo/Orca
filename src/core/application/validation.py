@@ -32,7 +32,7 @@ def validate_inputs(
                 errors.append(f"{device_id}/{name}: bad quality")
                 continue
             try:
-                timestamp = datetime.fromisoformat(str(record["timestamp"]).replace("Z", "+00:00"))
+                timestamp = datetime.fromisoformat(str(record["timestamp"]))
                 if timestamp.tzinfo is None:
                     raise ValueError("naive timestamp")
                 age = (clock - timestamp).total_seconds()

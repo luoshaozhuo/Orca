@@ -43,7 +43,7 @@ def load_config(directory: str | Path) -> OrcaConfig:
         with path.open(encoding="utf-8") as handle:
             value = yaml.load(handle, Loader=_UniqueLoader)
         if not isinstance(value, dict):
-            raise ValueError(f"{path}: root must be a mapping")
+            raise ValueError(f"{path}: root must be a mapping")  # noqa: TRY004 - config validation contract
         documents[name] = value
 
     system = documents["system"]

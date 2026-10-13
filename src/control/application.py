@@ -350,7 +350,7 @@ class ControlApplication:
             else:
                 raise ValueError(f"unknown operation: {action}")
             response = {"ok": True, "result": result}
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - IPC boundary converts failures to replies
             response = {"ok": False, "error": str(exc)}
         finally:
             writer.write((json.dumps(response, ensure_ascii=False) + "\n").encode())

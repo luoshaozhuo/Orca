@@ -85,9 +85,8 @@ class OutputConfig(ConfigModel):
             value = getattr(self, name)
             if value is not None and not math.isfinite(value):
                 raise ValueError(f"output {name} must be finite")
-        if self.minimum is not None and self.maximum is not None:
-            if self.minimum > self.maximum:
-                raise ValueError("output minimum exceeds maximum")
+        if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+            raise ValueError("output minimum exceeds maximum")
         return self
 
 
@@ -413,12 +412,12 @@ class CoordinationParametersConfig(ConfigModel):
         if self.dominant is not None and self.dominant not in functions:
             raise ValueError("coordination dominant function is outside the rule")
 
-        if algorithm == CoordinationAlgorithm.DEFAULT:
-            if (
-                self.pfr_agc_mode is not None
-                and self.pfr_agc_mode != PfrAgcMode.SAME_DIRECTION_ADD
-            ):
-                raise ValueError("unsupported default PFR/AGC mode")
+        if (
+            algorithm == CoordinationAlgorithm.DEFAULT
+            and self.pfr_agc_mode is not None
+            and self.pfr_agc_mode != PfrAgcMode.SAME_DIRECTION_ADD
+        ):
+            raise ValueError("unsupported default PFR/AGC mode")
 
         if algorithm == CoordinationAlgorithm.PRIORITY:
             tie_break = self.tie_break or TieBreak.REJECT

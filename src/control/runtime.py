@@ -241,7 +241,7 @@ class ControlRuntime:
                     if task_id in self._inflight_dispatch:
                         self._block_dispatch(task_id, "in-flight command cancelled; outcome UNKNOWN")
                     raise
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - isolate failed control cycles
                     self.reasons[task_id] = f"cycle failed: {exc}"
                     self._reset_task_state(task_id)
                     logger.warning("control task %s skipped: %s", task_id, exc)

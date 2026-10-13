@@ -135,7 +135,7 @@ class SafePlanDispatcher:
                     command_id, binding.device_id, binding.point_id,
                 )
                 raise
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - uncertain Commander outcome
                 logger.warning(
                     "dispatch UNKNOWN command_id=%s device=%s point=%s error=%s",
                     command_id, binding.device_id, binding.point_id, exc,
