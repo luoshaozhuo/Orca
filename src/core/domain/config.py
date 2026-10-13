@@ -287,6 +287,26 @@ class PlanningDeviceConfig(ConfigModel):
         return self
 
 
+class PlanningReferenceConfig(ConfigModel):
+    purpose: ReferencePurpose
+    source: ReferenceSource
+    resource_id: str = Field(min_length=1)
+    point_id: str = Field(min_length=1)
+    valid_for_s: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_reference(self) -> PlanningReferenceConfig:
+        if self.purpose not in (
+            ReferencePurpose.ACTIVE_BASE,
+            ReferencePurpose.PFR_DELTA,
+            ReferencePurpose.IR_DELTA,
+        ):
+            raise ValueError("unsupported planning reference purpose")
+        if not math.isfinite(self.valid_for_s):
+            raise ValueError("planning reference lifetime must be finite")
+        return self
+
+
 class ActivePlanningConfig(ConfigModel):
     target: str = Field(min_length=1)
     poi_device_id: str = Field(min_length=1)
@@ -295,6 +315,7 @@ class ActivePlanningConfig(ConfigModel):
     maximum: float
     devices: tuple[PlanningDeviceConfig, ...] = Field(min_length=1)
     authorized_sources: tuple[ReferenceSource, ...] = Field(min_length=1)
+    reference_inputs: tuple[PlanningReferenceConfig, ...] = ()
     active_functions: tuple[CoordinationFunction, ...] = ()
     maximum_skew_ns: int = Field(default=500_000_000, gt=0)
 
@@ -309,6 +330,11 @@ class ActivePlanningConfig(ConfigModel):
             raise ValueError("duplicate planning device")
         if len(self.authorized_sources) != len(set(self.authorized_sources)):
             raise ValueError("duplicate planning reference source")
+        reference_keys = [(item.purpose, item.source) for item in self.reference_inputs]
+        if len(reference_keys) != len(set(reference_keys)):
+            raise ValueError("duplicate planning reference input")
+        if any(item.source not in self.authorized_sources for item in self.reference_inputs):
+            raise ValueError("planning reference input source is not authorized")
         if len(self.active_functions) != len(set(self.active_functions)):
             raise ValueError("duplicate planning control function")
         if set(self.active_functions) - {CoordinationFunction.PFR, CoordinationFunction.IR}:
