@@ -102,11 +102,11 @@ class DeviceCapabilitySnapshot:
             )
             p = DevicePowerCapability(
                 item.device_id, item.p_current, item.p_min, item.p_max,
-                item.p_auto,
+                item.p_auto, item.p_weight,
             )
             q = DevicePowerCapability(
                 item.device_id, item.q_current, item.q_min, item.q_max,
-                item.q_auto,
+                item.q_auto, item.q_weight,
             )
             if record.storage is not None:
                 p = record.storage.apply(p)
