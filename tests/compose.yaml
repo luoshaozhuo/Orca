@@ -11,3 +11,29 @@ services:
       retries: 15
     tmpfs:
       - /data
+  redis-auth:
+    image: redis:7-alpine
+    # 凭据由测试夹具按运行动态生成，通过环境变量注入；ACL 只保存 SHA256 摘要。
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --aclfile
+      - /usr/local/etc/redis/users.acl
+    volumes:
+      - "${ORCA_TEST_ACL_FILE:-/dev/null}:/usr/local/etc/redis/users.acl:ro"
+    ports:
+      - "127.0.0.1::6379"
+    tmpfs:
+      - /data
+  redis-persist:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--dir", "/data"]
+    ports:
+      - "127.0.0.1::6379"
+    volumes:
+      - redis-persist-data:/data
+volumes:
+  redis-persist-data:
