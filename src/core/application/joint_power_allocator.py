@@ -36,6 +36,8 @@ def _project_device(
     q_min: float,
     q_max: float,
     s_max: float,
+    p_weight: float,
+    q_weight: float,
 ) -> tuple[float, float]:
     """投影到盒约束与 P²+Q²<=S² 的交集，避免先截断后越圆。"""
     if math.hypot(_clip(0.0, p_min, p_max), _clip(0.0, q_min, q_max)) > s_max:
@@ -47,8 +49,8 @@ def _project_device(
     low, high = 0.0, 1.0
     while True:
         trial = (
-            _clip(p / (1.0 + high), p_min, p_max),
-            _clip(q / (1.0 + high), q_min, q_max),
+            _clip(p / (1.0 + high * p_weight), p_min, p_max),
+            _clip(q / (1.0 + high * q_weight), q_min, q_max),
         )
         if math.hypot(*trial) <= s_max:
             break
@@ -58,8 +60,8 @@ def _project_device(
     for _ in range(70):
         mid = (low + high) / 2.0
         trial = (
-            _clip(p / (1.0 + mid), p_min, p_max),
-            _clip(q / (1.0 + mid), q_min, q_max),
+            _clip(p / (1.0 + mid * p_weight), p_min, p_max),
+            _clip(q / (1.0 + mid * q_weight), q_min, q_max),
         )
         if math.hypot(*trial) > s_max:
             low = mid
@@ -106,7 +108,7 @@ class JointPowerAllocator:
             p_target = math.fsum(item.p_current for item in devices)
         if q_target is None:
             q_target = math.fsum(item.q_current for item in devices)
-        bounds: list[tuple[float, float, float, float, float]] = []
+        bounds: list[tuple[float, float, float, float, float, float, float]] = []
         for device in devices:
             pl, ph = (
                 (device.p_min, device.p_max)
@@ -116,7 +118,7 @@ class JointPowerAllocator:
                 (device.q_min, device.q_max)
                 if device.q_auto and control_q else (device.q_current, device.q_current)
             )
-            bounds.append((pl, ph, ql, qh, device.s_max))
+            bounds.append((pl, ph, ql, qh, device.s_max, device.p_weight, device.q_weight))
 
         # 快速必要条件：矩形可行域与视在功率总容量。
         # 仅用于提前判不可行；通过检查仍需进行严格联合投影。
@@ -142,6 +144,10 @@ class JointPowerAllocator:
         # 全场投影要求严格守恒，投影中只有可自动调节的维度参与修正。
         movable_p = [i for i, item in enumerate(devices) if item.p_auto and control_p]
         movable_q = [i for i, item in enumerate(devices) if item.q_auto and control_q]
+        p_weight_sum = math.fsum(devices[i].p_weight for i in movable_p)
+        q_weight_sum = math.fsum(devices[i].q_weight for i in movable_q)
+        if not math.isfinite(p_weight_sum) or not math.isfinite(q_weight_sum):
+            raise ValueError("device allocation weights overflow")
         p = [item.p_current for item in devices]
         q = [item.q_current for item in devices]
         correction_p = [0.0] * n
@@ -157,12 +163,12 @@ class JointPowerAllocator:
             q_error = q_target - sum(aq)
             if movable_p:
                 for i in movable_p:
-                    ap[i] += p_error / len(movable_p)
+                    ap[i] += p_error * devices[i].p_weight / p_weight_sum
             elif abs(p_error) > tolerance:
                 break
             if movable_q:
                 for i in movable_q:
-                    aq[i] += q_error / len(movable_q)
+                    aq[i] += q_error * devices[i].q_weight / q_weight_sum
             elif abs(q_error) > tolerance:
                 break
             correction_p = [
