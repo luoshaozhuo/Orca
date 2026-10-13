@@ -10,7 +10,7 @@ from core.application.active_power_controller import ActivePowerController, Acti
 from core.application.control_coordinator import ControlCoordinator
 from core.application.control_laws import DirectControlLaw
 from core.application.control_pipeline import ControlPipeline
-from core.application.control_trajectory import PassthroughTrajectory
+from core.application.control_trajectory import PassthroughTrajectory, RampTrajectory
 from core.application.joint_power_allocator import JointPowerAllocator
 from core.application.port.planning_snapshot import PlanningSnapshot
 from core.application.read_only_planning_cycle import ReadOnlyPlanningCycle
@@ -105,3 +105,27 @@ async def test_unknown_planning_controller_rejected() -> None:
     cycle = make_cycle(SnapshotSource())
     with pytest.raises(ValueError, match="no planning controller"):
         await cycle.execute("missing")
+
+
+@pytest.mark.asyncio
+async def test_ramp_first_cycle_initializes_from_valid_feedback() -> None:
+    service = make_cycle(SnapshotSource())
+    controller = service._controllers["agc"]
+    controller.pipeline.trajectory = RampTrajectory(
+        up_per_s=1.0,
+        down_per_s=1.0,
+    )
+    result = await service.execute("agc")
+    # 0.1 s 内参考从实测 5 MW 朝 6 MW 变化至 5.1 MW。
+    assert result.allocation.active[0].value == pytest.approx(5.1)
+
+
+@pytest.mark.asyncio
+async def test_stale_cycle_does_not_initialize_ramp() -> None:
+    service = make_cycle(SnapshotSource(stale=True))
+    controller = service._controllers["agc"]
+    ramp = RampTrajectory(up_per_s=1.0, down_per_s=1.0)
+    controller.pipeline.trajectory = ramp
+    with pytest.raises(ValueError, match="stale"):
+        await service.execute("agc")
+    assert not ramp.initialized
