@@ -47,7 +47,7 @@ def _project_device(
     candidate = (_clip(p, p_min, p_max), _clip(q, q_min, q_max))
     if math.hypot(*candidate) <= s_max:
         return candidate
-    # KKT: x=clip(x0/(1+lambda), bounds)，lambda 由圆边界确定。
+    # KKT: x=clip(x0/(1+lambda*weight), bounds)，lambda 由圆边界确定。
     low, high = 0.0, 1.0
     while True:
         trial = (
@@ -70,8 +70,8 @@ def _project_device(
         else:
             high = mid
     return (
-        _clip(p / (1.0 + high), p_min, p_max),
-        _clip(q / (1.0 + high), q_min, q_max),
+        _clip(p / (1.0 + high * p_weight), p_min, p_max),
+        _clip(q / (1.0 + high * q_weight), q_min, q_max),
     )
 
 
