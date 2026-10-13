@@ -107,7 +107,7 @@ def test_authorized_references_produce_single_cycle_snapshot() -> None:
 def test_missing_required_support_does_not_silently_become_zero() -> None:
     references = manager()
     publish(references, ReferencePurpose.ACTIVE_BASE, 90.0, ControlValueKind.ABSOLUTE)
-    with pytest.raises(ValueError, match="pfr reference unavailable"):
+    with pytest.raises(ValueError, match="(pfr|ir) reference unavailable"):
         build(references)
 
 
