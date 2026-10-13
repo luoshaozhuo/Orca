@@ -10,7 +10,6 @@ from core.domain.control_value import (
     ControlValueRole,
 )
 from core.domain.power_allocation import (
-    DevicePowerCapability,
     PowerAllocationRequest,
     PowerAllocationResult,
 )
