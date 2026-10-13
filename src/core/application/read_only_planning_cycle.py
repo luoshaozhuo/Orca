@@ -18,6 +18,7 @@ class PlanningCycleResult:
 
     allocation: JointAllocationResult
     acquired_at_ns: int
+    expires_at_ns: int | None = None
 
 
 class PlanningCyclePort(Protocol):
@@ -87,11 +88,19 @@ class ReadOnlyPlanningCycle:
             )
             if completed_ns - snapshot.acquired_at_ns > self._maximum_age_ns:
                 raise ValueError("planning snapshot expired during calculation")
+            if snapshot.expires_at_ns is not None and completed_ns >= snapshot.expires_at_ns:
+                raise ValueError("planning inputs expired during calculation")
             if self._permitted is not None and not self._permitted(task_id):
                 raise ValueError("planning authority changed during calculation")
             return PlanningCycleResult(
                 allocation=allocation,
                 acquired_at_ns=snapshot.acquired_at_ns,
+                expires_at_ns=min(
+                    snapshot.devices.valid_until_ns,
+                    snapshot.expires_at_ns
+                    if snapshot.expires_at_ns is not None
+                    else snapshot.devices.valid_until_ns,
+                ),
             )
         except BaseException:
             controller.reset()
