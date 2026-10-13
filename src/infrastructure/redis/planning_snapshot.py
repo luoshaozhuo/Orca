@@ -12,6 +12,8 @@ from core.application.active_power_reference import active_power_cycle_from_refe
 from core.application.port.planning_snapshot import PlanningSnapshot
 from core.application.reactive_power_controller import ReactivePowerCycle
 from core.application.reference_manager import ReferenceManager
+from core.domain.agc import MODE_PURPOSE as AGC_MODE_PURPOSE
+from core.domain.agc import AgcMode
 from core.domain.avc import MODE_PURPOSE, AvcMode
 from core.domain.capability_snapshot import (
     DeviceCapabilityRecord,
@@ -40,10 +42,14 @@ from core.domain.reference import (
 # 参考用途到控制量/数值语义/工程单位的映射；不允许由点位拼写推断。
 _PURPOSE_VALUE_META: dict[
     ReferencePurpose,
-    tuple[ControlQuantity, ControlValueKind, str],
+    tuple[ControlQuantity, ControlValueKind | None, str],
 ] = {
     ReferencePurpose.ACTIVE_BASE: (
         ControlQuantity.ACTIVE_POWER, ControlValueKind.ABSOLUTE, "MW",
+    ),
+    # ACTIVE_LIMIT 的上限/下限语义由绑定显式给出，不允许默认。
+    ReferencePurpose.ACTIVE_LIMIT: (
+        ControlQuantity.ACTIVE_POWER, None, "MW",
     ),
     ReferencePurpose.PFR_DELTA: (
         ControlQuantity.ACTIVE_POWER, ControlValueKind.DELTA, "MW",
@@ -113,10 +119,17 @@ class PlanningReferenceBinding:
     resource_id: str
     point_id: str
     valid_for_ns: int
+    kind: ControlValueKind | None = None
 
     def __post_init__(self) -> None:
         if not self.resource_id or not self.point_id or self.valid_for_ns <= 0:
             raise ValueError("invalid external planning reference binding")
+        limit_kinds = {ControlValueKind.UPPER_LIMIT, ControlValueKind.LOWER_LIMIT}
+        if self.purpose == ReferencePurpose.ACTIVE_LIMIT:
+            if self.kind not in limit_kinds:
+                raise ValueError("ACTIVE_LIMIT binding requires an explicit limit kind")
+        elif self.kind is not None:
+            raise ValueError("limit kind is only valid for ACTIVE_LIMIT bindings")
 
 
 @dataclass(frozen=True, slots=True)
@@ -174,6 +187,8 @@ class ActivePlanningBinding:
     dt_s: float
     devices: tuple[DevicePlanningBinding, ...]
     authorized_sources: frozenset[ReferenceSource]
+    mode: AgcMode = AgcMode.SETPOINT
+    poi_available_point: str | None = None
     reference_inputs: tuple[PlanningReferenceBinding, ...] = ()
     active_functions: frozenset[CoordinationFunction] = frozenset()
     maximum_skew_ns: int = 500_000_000
@@ -197,6 +212,10 @@ class ActivePlanningBinding:
             raise ValueError("planning limits must be finite")
         if self.minimum > self.maximum or self.dt_s <= 0:
             raise ValueError("invalid planning target limits or period")
+        if self.mode == AgcMode.LIMIT and self.poi_available_point is None:
+            raise ValueError("LIMIT mode requires an available-power measurement")
+        if self.mode != AgcMode.LIMIT and self.poi_available_point is not None:
+            raise ValueError("available-power measurement is only used in LIMIT mode")
 
 
 class RedisPlanningSnapshotSource:
@@ -249,6 +268,8 @@ class RedisPlanningSnapshotSource:
         binding = self._bindings[task_id]
         reactive = binding.reactive
         pairs = [(binding.poi_device_id, binding.poi_active_point)]
+        if binding.poi_available_point is not None:
+            pairs.append((binding.poi_device_id, binding.poi_available_point))
         for device in binding.devices:
             pairs.extend(((device.device_id, device.p_point), (device.device_id, device.q_point)))
             if device.storage is not None:
@@ -300,6 +321,9 @@ class RedisPlanningSnapshotSource:
                 if stamp_ns == previous[0]:
                     continue
             quantity, kind, unit = _PURPOSE_VALUE_META[reference.purpose]
+            if kind is None:
+                assert reference.kind is not None
+                kind = reference.kind
             sample = ControlReference(
                 purpose=reference.purpose,
                 source=reference.source,
@@ -327,6 +351,11 @@ class RedisPlanningSnapshotSource:
                 raise ValueError(
                     f"{function.value}: control contribution not authorized"
                 )
+        base_purpose = AGC_MODE_PURPOSE[binding.mode]
+        feedforward = measured[pairs[0]]
+        if binding.mode == AgcMode.LIMIT:
+            assert binding.poi_available_point is not None
+            feedforward = measured[(binding.poi_device_id, binding.poi_available_point)]
         cycle = active_power_cycle_from_references(
             self._references,
             target=binding.target,
@@ -336,11 +365,12 @@ class RedisPlanningSnapshotSource:
             dt_s=binding.dt_s,
             minimum=binding.minimum,
             maximum=binding.maximum,
-            feedforward=measured[pairs[0]],
+            feedforward=feedforward,
             active_functions=binding.active_functions,
             required_generation=self._generation,
+            base_purpose=base_purpose,
         )
-        purposes = [ReferencePurpose.ACTIVE_BASE]
+        purposes = [base_purpose]
         if CoordinationFunction.PFR in binding.active_functions:
             purposes.append(ReferencePurpose.PFR_DELTA)
         if CoordinationFunction.IR in binding.active_functions:

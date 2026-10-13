@@ -114,7 +114,7 @@ def test_missing_required_support_does_not_silently_become_zero() -> None:
 def test_expired_base_blocks_cycle() -> None:
     references = manager()
     publish(references, ReferencePurpose.ACTIVE_BASE, 90.0, ControlValueKind.ABSOLUTE)
-    with pytest.raises(ValueError, match="active base reference unavailable"):
+    with pytest.raises(ValueError, match="ACTIVE_BASE: reference unavailable"):
         build(references, now_ns=100, functions=frozenset())
 
 

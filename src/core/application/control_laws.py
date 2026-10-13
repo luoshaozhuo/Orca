@@ -6,7 +6,11 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from core.domain.control_law import ControlLawInput, ControlLawResult
-from core.domain.control_value import ControlValue, ControlValueRole
+from core.domain.control_value import (
+    ControlValue,
+    ControlValueKind,
+    ControlValueRole,
+)
 
 
 class ControlLaw(Protocol):
@@ -72,6 +76,51 @@ class ProportionalControlLaw:
 
     def reset(self) -> None:
         """比例控制无状态。"""
+
+
+@dataclass(slots=True)
+class ActiveLimitLaw:
+    """AGC 限值模式：在调度限值边界内释放可用出力，不追踪限值本身。
+
+    `feedforward` 携带可用出力估计（MW）；上限取 min(可用, 限值)，
+    下限取 max(可用, 限值)。可用出力低于上限时目标即为可用出力，
+    限值只是约束而不是定值（设计 §6.1.6、§8.5）。无反馈状态。
+    """
+
+    def calculate(self, sample: ControlLawInput) -> ControlLawResult:
+        available = sample.feedforward
+        if not math.isfinite(available):
+            raise ValueError("active limit mode requires a finite available estimate")
+        limit = sample.reference.value
+        if not math.isfinite(limit):
+            raise ValueError("active limit reference must be finite")
+        if sample.reference.kind == ControlValueKind.UPPER_LIMIT:
+            output = min(available, limit)
+        elif sample.reference.kind == ControlValueKind.LOWER_LIMIT:
+            output = max(available, limit)
+        else:
+            raise ValueError("active limit law requires a limit reference")
+        candidate = max(sample.minimum, min(sample.maximum, output))
+        error = candidate - sample.measurement.value
+        if not math.isfinite(error):
+            raise ValueError("control law produced a non-finite result")
+        return ControlLawResult(
+            candidate=ControlValue(
+                quantity=sample.reference.quantity,
+                scope=sample.reference.scope,
+                target=sample.reference.target,
+                role=ControlValueRole.CANDIDATE_TARGET,
+                kind=ControlValueKind.ABSOLUTE,
+                value=candidate,
+                unit=sample.reference.unit,
+            ),
+            error=error,
+            unsaturated=output,
+            saturated=candidate != output,
+        )
+
+    def reset(self) -> None:
+        """限值映射无状态。"""
 
 
 @dataclass(slots=True)

@@ -5,7 +5,9 @@ import math
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from core.domain.agc import AgcMode
 from core.domain.avc import MODE_PURPOSE, AvcMode
+from core.domain.control_value import ControlValueKind
 from core.domain.coordination import (
     CoordinationAlgorithm,
     CoordinationFunction,
@@ -176,13 +178,14 @@ class ControlLawStageConfig(ConfigModel):
     def validate_stage(self) -> ControlLawStageConfig:
         names = {
             "direct": frozenset(),
+            "active_limit": frozenset(),
             "p": frozenset({"kp"}),
             "pi": frozenset({"kp", "ki", "kaw"}),
         }
         if self.algorithm not in names:
             raise ValueError(f"unsupported law algorithm: {self.algorithm}")
         provided = {name for name in ("kp", "ki", "kaw") if getattr(self, name) is not None}
-        if self.algorithm != "direct" and "kp" not in provided:
+        if self.algorithm not in ("direct", "active_limit") and "kp" not in provided:
             raise ValueError("p/pi control requires kp")
         if self.algorithm == "pi" and "ki" not in provided:
             raise ValueError("pi control requires ki")
@@ -295,18 +298,28 @@ class PlanningReferenceConfig(ConfigModel):
     point_id: str = Field(min_length=1)
     valid_for_s: float = Field(gt=0)
 
+    kind: ControlValueKind | None = None
+
     @model_validator(mode="after")
     def validate_reference(self) -> PlanningReferenceConfig:
         # 用途白名单由所属规划上下文校验：有功与无功规划各自限定允许用途。
         if not math.isfinite(self.valid_for_s):
             raise ValueError("planning reference lifetime must be finite")
+        limit_kinds = {ControlValueKind.UPPER_LIMIT, ControlValueKind.LOWER_LIMIT}
+        if self.purpose == ReferencePurpose.ACTIVE_LIMIT:
+            if self.kind not in limit_kinds:
+                raise ValueError("ACTIVE_LIMIT reference requires an explicit limit kind")
+        elif self.kind is not None:
+            raise ValueError("limit kind is only valid for ACTIVE_LIMIT references")
         return self
 
 
 class ActivePlanningConfig(ConfigModel):
     target: str = Field(min_length=1)
+    mode: AgcMode = AgcMode.SETPOINT
     poi_device_id: str = Field(min_length=1)
     poi_active_point: str = Field(min_length=1)
+    poi_available_point: str | None = None
     minimum: float
     maximum: float
     devices: tuple[PlanningDeviceConfig, ...] = Field(min_length=1)
@@ -330,12 +343,23 @@ class ActivePlanningConfig(ConfigModel):
         if len(reference_keys) != len(set(reference_keys)):
             raise ValueError("duplicate planning reference input")
         allowed_purposes = {
-            ReferencePurpose.ACTIVE_BASE,
-            ReferencePurpose.PFR_DELTA,
-            ReferencePurpose.IR_DELTA,
-        }
+            AgcMode.SETPOINT: {
+                ReferencePurpose.ACTIVE_BASE,
+                ReferencePurpose.PFR_DELTA,
+                ReferencePurpose.IR_DELTA,
+            },
+            AgcMode.LIMIT: {
+                ReferencePurpose.ACTIVE_LIMIT,
+                ReferencePurpose.PFR_DELTA,
+                ReferencePurpose.IR_DELTA,
+            },
+        }[self.mode]
         if any(item.purpose not in allowed_purposes for item in self.reference_inputs):
-            raise ValueError("unsupported planning reference purpose")
+            raise ValueError(f"{self.mode}: unsupported planning reference purpose")
+        if self.mode == AgcMode.LIMIT and self.poi_available_point is None:
+            raise ValueError("LIMIT mode requires an available-power measurement")
+        if self.mode != AgcMode.LIMIT and self.poi_available_point is not None:
+            raise ValueError("available-power measurement is only used in LIMIT mode")
         if any(item.source not in self.authorized_sources for item in self.reference_inputs):
             raise ValueError("planning reference input source is not authorized")
         if len(self.active_functions) != len(set(self.active_functions)):
@@ -596,12 +620,24 @@ class OrcaConfig(ConfigModel):
                         raise ValueError(
                             f"task {name}: planning device measurement not registered"
                         )
+                algorithm = self.controllers[task.controller_id].pipeline.law.algorithm
+                if task.planning.mode == AgcMode.LIMIT and algorithm != "active_limit":
+                    raise ValueError(
+                        f"task {name}: LIMIT mode requires the active_limit control law"
+                    )
+                if task.planning.mode != AgcMode.LIMIT and algorithm == "active_limit":
+                    raise ValueError(
+                        f"task {name}: active_limit control law requires LIMIT mode"
+                    )
                 if task.planning.poi_device_id not in self.resources:
                     raise ValueError(
                         f"task {name}: planning POI resource is not configured"
                     )
                 poi = self.resources[task.planning.poi_device_id]
-                if task.planning.poi_active_point not in {
+                poi_required = {task.planning.poi_active_point}
+                if task.planning.poi_available_point is not None:
+                    poi_required.add(task.planning.poi_available_point)
+                if not poi_required <= {
                     point.point_id for point in poi.inputs.values()
                 }:
                     raise ValueError(f"task {name}: POI measurement not registered")

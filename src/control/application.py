@@ -89,6 +89,7 @@ class ControlApplication:
                         resource_id=reference.resource_id,
                         point_id=reference.point_id,
                         valid_for_ns=int(reference.valid_for_s * 1e9),
+                        kind=reference.kind,
                     )
                     for reference in references
                 )
@@ -112,8 +113,10 @@ class ControlApplication:
             planning_bindings = {
                 task_id: ActivePlanningBinding(
                     target=plan.target,
+                    mode=plan.mode,
                     poi_device_id=plan.poi_device_id,
                     poi_active_point=plan.poi_active_point,
+                    poi_available_point=plan.poi_available_point,
                     minimum=plan.minimum,
                     maximum=plan.maximum,
                     dt_s=task.interval,

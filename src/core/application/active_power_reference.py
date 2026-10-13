@@ -24,18 +24,21 @@ def active_power_cycle_from_references(
     achievable: float | None = None,
     active_functions: frozenset[CoordinationFunction] = frozenset(),
     required_generation: int | None = None,
+    base_purpose: ReferencePurpose = ReferencePurpose.ACTIVE_BASE,
 ) -> ActivePowerCycle:
     """基于同一时刻的有效参考建立快照；缺失已启用功能立即闭锁。"""
+    if base_purpose not in (ReferencePurpose.ACTIVE_BASE, ReferencePurpose.ACTIVE_LIMIT):
+        raise ValueError("active base reference must be a setpoint or a limit")
     base = references.current(
-        ReferencePurpose.ACTIVE_BASE,
+        base_purpose,
         target,
         now_ns=now_ns,
         authorized_sources=authorized_sources,
     )
     if base is None:
-        raise ValueError("active base reference unavailable or unauthorized")
+        raise ValueError(f"{base_purpose.value}: reference unavailable or unauthorized")
     if required_generation is not None and base.generation != required_generation:
-        raise ValueError("active base reference generation mismatch")
+        raise ValueError(f"{base_purpose.value}: reference generation mismatch")
 
     mappings = {
         CoordinationFunction.PFR: ReferencePurpose.PFR_DELTA,

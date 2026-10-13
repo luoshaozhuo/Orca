@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from core.application.control_laws import (
+    ActiveLimitLaw,
     DirectControlLaw,
     PIControlLaw,
     ProportionalControlLaw,
@@ -44,6 +45,8 @@ def build_control_pipeline(config: ControlPipelineConfig) -> ControlPipeline:
     elif config.law.algorithm == "p":
         assert config.law.kp is not None
         law = ProportionalControlLaw(kp=config.law.kp)
+    elif config.law.algorithm == "active_limit":
+        law = ActiveLimitLaw()
     else:
         law = DirectControlLaw()
 
