@@ -10,8 +10,6 @@ from core.domain.control_value import (
     ControlQuantity,
     ControlScope,
     ControlValue,
-    ControlValueKind,
-    ControlValueRole,
 )
 from core.domain.coordination import (
     ControlDemand,
@@ -71,11 +69,7 @@ class ActivePowerController:
             ):
                 raise ValueError("active-power controller requires plant or POI power")
             control = self.pipeline.evaluate(input_value)
-            base = replace(
-                control.candidate,
-                role=ControlValueRole.CANDIDATE_TARGET,
-                kind=ControlValueKind.ABSOLUTE,
-            )
+            base = control.candidate
             context = CoordinationContext(base=base, demands=cycle.demands)
             coordinated = self.coordinator.coordinate(context)
             if not cycle.minimum <= coordinated.target.value <= cycle.maximum:
