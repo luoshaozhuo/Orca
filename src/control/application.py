@@ -19,8 +19,10 @@ from core.application.reference_manager import ReferenceManager
 from core.domain.config import OrcaConfig
 from core.domain.control_authority import ControlFunction
 from core.domain.control_value import ControlQuantity
+from core.domain.device_capability import DeviceTechnology
 from infrastructure.redis.planning_snapshot import (
     ActivePlanningBinding,
+    DevicePlanningBinding,
     RedisPlanningSnapshotSource,
 )
 from .runtime import ControlRuntime
@@ -59,6 +61,42 @@ class ControlApplication:
         if any(controller.enabled and controller.strategy != "noop" for controller in config.controllers.values()):
             raise ValueError("unsupported strategy: only noop is available before field commissioning")
         self.cycle = ControlCycle(config, self.redis, self.commander, NoOpStrategy())
+        if planning_bindings is None and planning_snapshots is None and not planning_tasks:
+            configured = {
+                task_id: (task, task.planning)
+                for task_id, task in config.tasks.items()
+                if task.enabled and task.planning is not None
+            }
+            planning_tasks = frozenset(configured)
+            planning_bindings = {
+                task_id: ActivePlanningBinding(
+                    target=plan.target,
+                    poi_device_id=plan.poi_device_id,
+                    poi_active_point=plan.poi_active_point,
+                    minimum=plan.minimum,
+                    maximum=plan.maximum,
+                    dt_s=task.interval,
+                    authorized_sources=frozenset(plan.authorized_sources),
+                    active_functions=frozenset(plan.active_functions),
+                    maximum_skew_ns=plan.maximum_skew_ns,
+                    devices=tuple(
+                        DevicePlanningBinding(
+                            device_id=device.device_id,
+                            p_point=device.p_point,
+                            q_point=device.q_point,
+                            technology=DeviceTechnology(device.technology),
+                            p_min=device.p_min, p_max=device.p_max,
+                            q_min=device.q_min, q_max=device.q_max,
+                            s_max=device.s_max,
+                            p_auto=device.p_auto, q_auto=device.q_auto,
+                            p_weight=device.p_weight, q_weight=device.q_weight,
+                        )
+                        for device in plan.devices
+                    ),
+                )
+                for task_id, (task, plan) in configured.items()
+            }
+
         if planning_bindings is not None and planning_snapshots is not None:
             raise ValueError("select a single planning snapshot source")
         if planning_bindings is not None:
