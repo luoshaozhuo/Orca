@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from dataclasses import replace
 
 import pytest
 
@@ -149,3 +150,12 @@ async def test_inflight_cancellation_is_unknown_without_retry() -> None:
     assert receipt.status == DispatchStatus.UNKNOWN
     assert receipt.confirmed == 0
     assert len(commander.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_source_expiration_blocks_dispatch() -> None:
+    commander = Commander()
+    candidate = replace(plan(), expires_at_ns=time.time_ns() - 1)
+    receipt = await dispatcher(commander).dispatch("agc", candidate)
+    assert receipt.status == DispatchStatus.BLOCKED
+    assert not commander.calls
