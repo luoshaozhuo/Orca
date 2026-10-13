@@ -1,6 +1,7 @@
 """执行期最后一次门禁，单条写入，不重发未知结果。"""
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Callable
@@ -125,6 +126,15 @@ class SafePlanDispatcher:
             try:
                 outcome = await self._commander.write_once(
                     command_id, binding.device_id, binding.point_id, value
+                )
+            except asyncio.CancelledError:
+                logger.warning(
+                    "dispatch UNKNOWN cancellation command_id=%s device=%s point=%s",
+                    command_id, binding.device_id, binding.point_id,
+                )
+                return DispatchReceipt(
+                    DispatchStatus.UNKNOWN, "Commander write cancelled; outcome unknown",
+                    tuple(submitted), confirmed,
                 )
             except Exception as exc:
                 logger.warning(
