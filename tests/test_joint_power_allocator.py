@@ -1,0 +1,117 @@
+"""统一快照与 P/Q 联合分配测试。"""
+from __future__ import annotations
+
+import math
+
+import pytest
+
+from core.application.joint_power_allocator import JointPowerAllocator
+from core.domain.capability_snapshot import DeviceCapabilityRecord, DeviceCapabilitySnapshot
+from core.domain.device_capability import (
+    DevicePQCapability, DeviceTechnology, StorageEnergyLimits,
+)
+from core.domain.device_ramp import DeviceRampLimits
+
+
+def device(
+    device_id: str, p: float = 0.0, q: float = 0.0,
+    *, auto_p: bool = True, auto_q: bool = True, s: float = 10.0,
+    technology: DeviceTechnology = DeviceTechnology.WIND,
+) -> DevicePQCapability:
+    return DevicePQCapability(
+        device_id=device_id, technology=technology,
+        p_current=p, q_current=q,
+        p_min=-10.0, p_max=10.0, q_min=-10.0, q_max=10.0,
+        s_max=s, p_auto=auto_p, q_auto=auto_q,
+    )
+
+
+def snapshot(*records: DeviceCapabilityRecord) -> DeviceCapabilitySnapshot:
+    return DeviceCapabilitySnapshot(
+        records=records, generation=7, sampled_at_ns=100,
+        valid_until_ns=200,
+    )
+
+
+def record(item: DevicePQCapability, **kwargs) -> DeviceCapabilityRecord:
+    return DeviceCapabilityRecord(
+        capability=item, timestamp_ns=90, generation=7, **kwargs,
+    )
+
+
+def solve(s: DeviceCapabilitySnapshot, p: float, q: float):
+    return JointPowerAllocator().allocate(
+        s, p_target=p, q_target=q, now_ns=110, maximum_age_ns=30,
+    )
+
+
+def test_joint_allocator_meets_both_targets() -> None:
+    result = solve(
+        snapshot(record(device("wind")), record(device("pv"))),
+        12.0, 12.0,
+    )
+    assert result.feasible
+    assert sum(item.value for item in result.active) == pytest.approx(12.0, abs=1e-6)
+    assert sum(item.value for item in result.reactive) == pytest.approx(12.0, abs=1e-6)
+    assert all(
+        math.hypot(result.active[i].value, result.reactive[i].value) <= 10.000001
+        for i in range(2)
+    )
+
+
+def test_impossible_joint_target_returns_no_setpoints() -> None:
+    result = solve(snapshot(record(device("a")), record(device("b"))), 19, 19)
+    assert not result.feasible
+    assert result.active == result.reactive == ()
+
+
+def test_manual_active_power_stays_fixed() -> None:
+    result = solve(
+        snapshot(
+            record(device("manual", p=3, q=0, auto_p=False)),
+            record(device("auto")),
+        ),
+        7.0, 4.0,
+    )
+    assert result.feasible
+    assert [item.target for item in result.active] == ["auto"]
+    assert len(result.reactive) == 2
+
+
+def test_outdated_capability_is_rejected() -> None:
+    s = snapshot(record(device("wtg")))
+    with pytest.raises(ValueError, match="stale"):
+        JointPowerAllocator().allocate(
+            s, p_target=1, q_target=1,
+            now_ns=160, maximum_age_ns=30,
+        )
+
+
+def test_mixed_generation_rejected() -> None:
+    with pytest.raises(ValueError, match="mixed"):
+        snapshot(DeviceCapabilityRecord(device("wtg"), 90, 6))
+
+
+def test_soc_and_ramp_are_applied_before_joint_allocation() -> None:
+    s = snapshot(
+        record(
+            device("storage", technology=DeviceTechnology.STORAGE),
+            storage=StorageEnergyLimits(
+                soc=0.2, soc_min=0.2, soc_max=0.8,
+                energy_mwh=1.0, charge_efficiency=1.0,
+                discharge_efficiency=1.0, horizon_s=3600.0,
+            ),
+            p_ramp=DeviceRampLimits(
+                up_per_s=1.0, down_per_s=1.0, horizon_s=1.0,
+            ),
+        )
+    )
+    assert s.bounded()[0].p_max == 0.0
+    result = solve(s, 1.0, 0.0)
+    assert not result.feasible
+    assert not result.active
+
+
+def test_empty_device_list_fails_closed() -> None:
+    with pytest.raises(ValueError, match="requires device"):
+        solve(snapshot(), 0.0, 0.0)
