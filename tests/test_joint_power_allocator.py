@@ -194,3 +194,21 @@ def test_deterministic_feasible_joint_cases() -> None:
         assert abs(result.q_residual) <= 1e-6
         for p, q in zip(result.active, result.reactive):
             assert math.hypot(p.value, q.value) <= 10.000001
+
+
+def test_p_only_cannot_violate_fixed_reactive_output() -> None:
+    s = snapshot(record(device("wtg", p=0.0, q=8.0)))
+    result = JointPowerAllocator().allocate(
+        s, p_target=8.0, q_target=None, now_ns=110, maximum_age_ns=30,
+    )
+    assert not result.feasible
+    assert result.active == result.reactive == ()
+
+
+def test_q_only_cannot_violate_fixed_active_output() -> None:
+    s = snapshot(record(device("wtg", p=8.0, q=0.0)))
+    result = JointPowerAllocator().allocate(
+        s, p_target=None, q_target=8.0, now_ns=110, maximum_age_ns=30,
+    )
+    assert not result.feasible
+    assert result.active == result.reactive == ()
