@@ -5,17 +5,27 @@ import asyncio
 import json
 from pathlib import Path
 
-from algorithms.noop import NoOpStrategy
 from core.application.active_power_controller import ActivePowerController
 from core.application.control_coordinator import ControlCoordinator
-from core.application.control_pipeline_factory import build_control_pipeline
+from core.application.control_pipeline_factory import (
+    build_control_pipeline,
+    build_reactive_controller,
+)
 from core.application.dispatch_mapping import validate_dispatch_bindings
+from core.application.frequency_response import (
+    FrequencyResponseService,
+    IrEventMachine,
+    PfrEventMachine,
+    RocofEstimator,
+)
 from core.application.internal_reference import InternalReferenceService
 from core.application.joint_power_allocator import JointPowerAllocator
 from core.application.port.planning_snapshot import PlanningSnapshotPort
 from core.application.read_only_planning_cycle import ReadOnlyPlanningCycle
+from core.application.reference_generators import InertiaParameters, PFRParameters
 from core.application.reference_manager import ReferenceManager
 from core.application.safe_plan_dispatcher import SafePlanDispatcher
+from core.domain.agc import MODE_PURPOSE as AGC_MODE_PURPOSE
 from core.domain.config import ControlPipelineConfig, OrcaConfig
 from core.domain.control_authority import ControlFunction
 from core.domain.control_value import ControlQuantity
@@ -26,6 +36,7 @@ from infrastructure.redis.planning_snapshot import (
     ActivePlanningBinding,
     DevicePlanningBinding,
     PlanningReferenceBinding,
+    ReactivePlanningBinding,
     RedisPlanningSnapshotSource,
     StoragePlanningBinding,
 )
@@ -33,8 +44,7 @@ from infrastructure.redis.source import RedisSource
 from infrastructure.wind_hub.commander import CommanderClient
 from infrastructure.wind_hub.watchdog import WindHubWatchdog
 
-from .cycle import ControlCycle
-from .runtime import ControlRuntime
+from .runtime import ControlRuntime, TaskState
 
 
 class ControlApplication:
@@ -64,9 +74,6 @@ class ControlApplication:
         timeout = config.wind_hub.watchdog.timeout
         self.redis = RedisSource(config.wind_hub.redis, timeout)
         self.commander = CommanderClient(config.wind_hub.commander.target, timeout)
-        if any(controller.enabled and controller.strategy != "noop" for controller in config.controllers.values()):
-            raise ValueError("unsupported strategy: only noop is available before field commissioning")
-        self.cycle = ControlCycle(config, self.redis, self.commander, NoOpStrategy())
         if planning_bindings is None and planning_snapshots is None and not planning_tasks:
             configured = {
                 task_id: (task, task.planning)
@@ -74,27 +81,53 @@ class ControlApplication:
                 if task.enabled and task.planning is not None
             }
             planning_tasks = frozenset(configured)
+
+            def _reference_bindings(
+                references: tuple,
+            ) -> tuple[PlanningReferenceBinding, ...]:
+                return tuple(
+                    PlanningReferenceBinding(
+                        purpose=reference.purpose,
+                        source=reference.source,
+                        resource_id=reference.resource_id,
+                        point_id=reference.point_id,
+                        valid_for_ns=int(reference.valid_for_s * 1e9),
+                        kind=reference.kind,
+                    )
+                    for reference in references
+                )
+
+            def _reactive_binding(task_id: str) -> ReactivePlanningBinding | None:
+                plan = config.tasks[task_id].reactive_planning
+                if plan is None:
+                    return None
+                return ReactivePlanningBinding(
+                    target=plan.target,
+                    mode=plan.mode,
+                    poi_device_id=plan.poi_device_id,
+                    poi_reactive_point=plan.poi_reactive_point,
+                    minimum=plan.minimum,
+                    maximum=plan.maximum,
+                    authorized_sources=frozenset(plan.authorized_sources),
+                    poi_voltage_point=plan.poi_voltage_point,
+                    reference_inputs=_reference_bindings(plan.reference_inputs),
+                )
+
             planning_bindings = {
                 task_id: ActivePlanningBinding(
                     target=plan.target,
+                    mode=plan.mode,
                     poi_device_id=plan.poi_device_id,
                     poi_active_point=plan.poi_active_point,
+                    poi_available_point=plan.poi_available_point,
                     minimum=plan.minimum,
                     maximum=plan.maximum,
                     dt_s=task.interval,
                     authorized_sources=frozenset(plan.authorized_sources),
                     active_functions=frozenset(plan.active_functions),
-                    reference_inputs=tuple(
-                        PlanningReferenceBinding(
-                            purpose=reference.purpose,
-                            source=reference.source,
-                            resource_id=reference.resource_id,
-                            point_id=reference.point_id,
-                            valid_for_ns=int(reference.valid_for_s * 1e9),
-                        )
-                        for reference in plan.reference_inputs
-                    ),
+                    reference_inputs=_reference_bindings(plan.reference_inputs),
                     maximum_skew_ns=plan.maximum_skew_ns,
+                    reactive=_reactive_binding(task_id),
                     devices=tuple(
                         DevicePlanningBinding(
                             device_id=device.device_id,
@@ -160,9 +193,19 @@ class ControlApplication:
                 JointPowerAllocator(),
                 maximum_age_ns=int(config.wind_hub.watchdog.interval * 1e9),
                 permitted=self._can_publish_plan,
+                reactive_controllers={
+                    task_id: build_reactive_controller(
+                        plan.mode,
+                        config.controllers[
+                            config.tasks[task_id].controller_id
+                        ].pipeline,
+                    )
+                    for task_id in planning_tasks
+                    if (plan := config.tasks[task_id].reactive_planning) is not None
+                },
             )
         self.runtime = ControlRuntime(
-            config, self.redis, self.cycle,
+            config, self.redis,
             reset_control_state=self._reset_control_state,
             planning_cycle=planning_cycle,
             planning_tasks=planning_tasks,
@@ -170,6 +213,57 @@ class ControlApplication:
         self.internal_references = InternalReferenceService(
             self.references, self.runtime.control_authority,
         )
+        self.frequency_services = {
+            task_id: FrequencyResponseService(
+                internal=self.internal_references,
+                source=self.redis,
+                device_id=active_plan.poi_device_id,
+                point_id=frequency.frequency_point,
+                target=active_plan.target,
+                valid_for_ns=int(frequency.valid_for_s * 1e9),
+                generation=config.runtime.planning_generation,
+                maximum_age_ns=int(config.wind_hub.watchdog.interval * 1e9),
+                base_purpose=AGC_MODE_PURPOSE[active_plan.mode],
+                authorized_sources=frozenset(active_plan.authorized_sources),
+                pfr=(
+                    PfrEventMachine(
+                        PFRParameters(
+                            nominal_frequency_hz=frequency.nominal_frequency_hz,
+                            deadband_hz=frequency.pfr.deadband_hz,
+                            gain_mw_per_hz=frequency.pfr.gain_mw_per_hz,
+                            max_increase_mw=frequency.pfr.max_increase_mw,
+                            max_decrease_mw=frequency.pfr.max_decrease_mw,
+                        ),
+                        recovery_s=frequency.pfr.recovery_s,
+                    )
+                    if frequency.pfr is not None else None
+                ),
+                ir=(
+                    IrEventMachine(
+                        InertiaParameters(
+                            gain_mw_second_per_hz=frequency.ir.gain_mw_second_per_hz,
+                            max_increase_mw=frequency.ir.max_increase_mw,
+                            max_decrease_mw=frequency.ir.max_decrease_mw,
+                        ),
+                        threshold_hz_per_s=frequency.ir.rocof_threshold_hz_per_s,
+                        recovery_s=frequency.ir.recovery_s,
+                    )
+                    if frequency.ir is not None else None
+                ),
+                rocof=(
+                    RocofEstimator(
+                        window_s=frequency.ir.rocof_window_s,
+                        min_samples=frequency.ir.rocof_min_samples,
+                    )
+                    if frequency.ir is not None else None
+                ),
+            )
+            for task_id in planning_tasks
+            if (active_plan := config.tasks[task_id].planning) is not None
+            and (frequency := active_plan.frequency) is not None
+        }
+        if self.frequency_services:
+            self.runtime.install_internal_references(self.frequency_services)
         self.watchdog = WindHubWatchdog(config, self.runtime, self.redis, self.commander)
         self._server: asyncio.AbstractServer | None = None
         self._socket = Path(config.runtime.socket_path)
@@ -178,8 +272,11 @@ class ControlApplication:
         return (
             task_id in self.config.tasks
             and self.runtime.ready
-            and self.runtime.states[task_id] == "RUNNING"
-            and self.runtime.control_authority.can_output(ControlFunction.AGC)
+            and self.runtime.states[task_id] == TaskState.RUNNING
+            and all(
+                self.runtime.control_authority.can_output(function)
+                for function in self.runtime.task_functions(task_id)
+            )
         )
 
     def _can_contribute(
@@ -189,7 +286,7 @@ class ControlApplication:
     ) -> bool:
         if task_id not in self.config.tasks:
             return False
-        if not self.runtime.ready or self.runtime.states[task_id] != "RUNNING":
+        if not self.runtime.ready or self.runtime.states[task_id] != TaskState.RUNNING:
             return False
         if function == CoordinationFunction.PFR:
             control_function = ControlFunction.PFR
@@ -210,7 +307,7 @@ class ControlApplication:
         task = self.config.tasks[task_id]
         if device_id not in task.resource_ids:
             return False
-        if not self.runtime.ready or self.runtime.states[task_id] != "RUNNING":
+        if not self.runtime.ready or self.runtime.states[task_id] != TaskState.RUNNING:
             return False
         if quantity == ControlQuantity.ACTIVE_POWER:
             function = ControlFunction.AGC
@@ -257,19 +354,25 @@ class ControlApplication:
             raise PermissionError("pipeline change requires authorization")
         if task_id not in self.control_pipelines:
             raise ValueError(f"unknown or disabled pipeline task: {task_id}")
-        if self.runtime.states[task_id] != "STOPPED":
+        if self.runtime.states[task_id] != TaskState.STOPPED:
             raise RuntimeError("pipeline switch requires a stopped task")
         updated = build_control_pipeline(config)
         old = self.control_pipelines[task_id]
         old.reset()
         self.control_pipelines[task_id] = updated
         self.runtime.planning_results.pop(task_id, None)
-        planning = self.runtime._planning_cycle
-        if isinstance(planning, ReadOnlyPlanningCycle) and task_id in self.runtime._planning_tasks:
+        planning = self.runtime.planning_cycle_port
+        if isinstance(planning, ReadOnlyPlanningCycle) and task_id in self.runtime.planning_task_ids:
             planning.replace_controller(
                 task_id,
                 ActivePowerController(updated, self.active_power_coordinator),
             )
+            reactive_plan = self.config.tasks[task_id].reactive_planning
+            if reactive_plan is not None:
+                planning.replace_reactive_controller(
+                    task_id,
+                    build_reactive_controller(reactive_plan.mode, config),
+                )
 
     async def start(self) -> None:
         if self._socket.exists():
@@ -302,11 +405,11 @@ class ControlApplication:
             "output_access_verified": self.watchdog.output_access_verified,
             "last_error": self.watchdog.last_error,
             "tasks": self.runtime.states.copy(),
-            "output_owners": {f"{device}/{point}": owner for (device, point), owner in self.runtime._authority.items()},
+            "output_owners": {f"{device}/{point}": owner for (device, point), owner in self.runtime.output_owners().items()},
             "task_reasons": self.runtime.reasons.copy(),
             "dispatch_write_enabled": self.runtime.write_enabled,
             "dispatch_blocks": self.runtime.dispatch_blocked.copy(),
-            "planning_tasks": sorted(self.runtime._planning_tasks),
+            "planning_tasks": sorted(self.runtime.planning_task_ids),
             "planning_results": {
                 task_id: {
                     "generation": result.allocation.generation,
@@ -315,18 +418,37 @@ class ControlApplication:
                     "reactive_setpoints": len(result.allocation.reactive),
                 }
                 for task_id, result in self.runtime.planning_results.items()
-                if self.runtime.ready and self.runtime.states[task_id] == "RUNNING"
-                and self.runtime.control_authority.can_output(ControlFunction.AGC)
+                if self.runtime.ready and self.runtime.states[task_id] == TaskState.RUNNING
+                and all(
+                    self.runtime.control_authority.can_output(function)
+                    for function in self.runtime.task_functions(task_id)
+                )
+            },
+            "frequency_response": {
+                task_id: service.diagnostics()
+                for task_id, service in self.frequency_services.items()
             },
             "authority_mode": self.runtime.control_authority.mode.value,
             "control_functions": {
                 function.value: {
-                    "service": self.runtime.control_authority.functions[function].value,
+                    "service": self.runtime.control_authority.states[function].value,
                     "blocked": sorted(self.runtime.control_authority.blocks[function]),
                     "can_output": self.runtime.control_authority.can_output(function),
                 }
-                for function in self.runtime.control_authority.functions
+                for function in self.runtime.control_authority.states
             },
+            "authority_audit": [
+                {
+                    "timestamp_ns": record.timestamp_ns,
+                    "operator": record.operator,
+                    "function": record.function.value if record.function else None,
+                    "action": record.action,
+                    "from_state": record.from_state,
+                    "to_state": record.to_state,
+                    "reason": record.reason,
+                }
+                for record in self.runtime.control_authority.audits()[-50:]
+            ],
         }
 
     async def _handle(

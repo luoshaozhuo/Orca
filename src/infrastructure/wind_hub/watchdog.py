@@ -6,7 +6,7 @@ import logging
 from typing import Protocol
 
 from control.runtime import ControlRuntime
-from core.domain.config import OrcaConfig
+from core.domain.config import OrcaConfig, OutputConfig, VariableConfig
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,11 @@ class WindHubWatchdog:
                 continue
             if device_id not in devices:
                 raise ValueError(f"Commander missing enabled device {device_id}")
-            for variable in (*resource.inputs.values(), *resource.outputs.values()):
+            variables: list[VariableConfig | OutputConfig] = [
+                *resource.inputs.values(),
+                *resource.outputs.values(),
+            ]
+            for variable in variables:
                 actual_type = await self.commander.resolve_point(device_id, variable.point_id)
                 if variable.data_type is not None and actual_type != variable.data_type:
                     raise ValueError(

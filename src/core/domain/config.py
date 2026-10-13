@@ -5,6 +5,9 @@ import math
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from core.domain.agc import AgcMode
+from core.domain.avc import MODE_PURPOSE, AvcMode
+from core.domain.control_value import ControlValueKind
 from core.domain.coordination import (
     CoordinationAlgorithm,
     CoordinationFunction,
@@ -175,13 +178,14 @@ class ControlLawStageConfig(ConfigModel):
     def validate_stage(self) -> ControlLawStageConfig:
         names = {
             "direct": frozenset(),
+            "active_limit": frozenset(),
             "p": frozenset({"kp"}),
             "pi": frozenset({"kp", "ki", "kaw"}),
         }
         if self.algorithm not in names:
             raise ValueError(f"unsupported law algorithm: {self.algorithm}")
         provided = {name for name in ("kp", "ki", "kaw") if getattr(self, name) is not None}
-        if self.algorithm != "direct" and "kp" not in provided:
+        if self.algorithm not in ("direct", "active_limit") and "kp" not in provided:
             raise ValueError("p/pi control requires kp")
         if self.algorithm == "pi" and "ki" not in provided:
             raise ValueError("pi control requires ki")
@@ -203,7 +207,6 @@ class ControlPipelineConfig(ConfigModel):
 
 class ControllerConfig(ConfigModel):
     type: str = Field(min_length=1)
-    strategy: str = Field(min_length=1)
     pipeline: ControlPipelineConfig = Field(default_factory=ControlPipelineConfig)
     enabled: bool = True
     references: tuple[ReferencePolicyConfig, ...] = ()
@@ -294,29 +297,104 @@ class PlanningReferenceConfig(ConfigModel):
     point_id: str = Field(min_length=1)
     valid_for_s: float = Field(gt=0)
 
+    kind: ControlValueKind | None = None
+
     @model_validator(mode="after")
     def validate_reference(self) -> PlanningReferenceConfig:
-        if self.purpose not in (
-            ReferencePurpose.ACTIVE_BASE,
-            ReferencePurpose.PFR_DELTA,
-            ReferencePurpose.IR_DELTA,
-        ):
-            raise ValueError("unsupported planning reference purpose")
+        # 用途白名单由所属规划上下文校验：有功与无功规划各自限定允许用途。
         if not math.isfinite(self.valid_for_s):
             raise ValueError("planning reference lifetime must be finite")
+        limit_kinds = {ControlValueKind.UPPER_LIMIT, ControlValueKind.LOWER_LIMIT}
+        if self.purpose == ReferencePurpose.ACTIVE_LIMIT:
+            if self.kind not in limit_kinds:
+                raise ValueError("ACTIVE_LIMIT reference requires an explicit limit kind")
+        elif self.kind is not None:
+            raise ValueError("limit kind is only valid for ACTIVE_LIMIT references")
+        return self
+
+
+class PfrTuningConfig(ConfigModel):
+    """一次调频现场整定；无默认值，必须按批准定值配置。"""
+
+    deadband_hz: float = Field(gt=0)
+    gain_mw_per_hz: float = Field(gt=0)
+    max_increase_mw: float = Field(ge=0)
+    max_decrease_mw: float = Field(ge=0)
+    recovery_s: float = Field(default=0.0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_tuning(self) -> PfrTuningConfig:
+        for value in (
+            self.deadband_hz,
+            self.gain_mw_per_hz,
+            self.max_increase_mw,
+            self.max_decrease_mw,
+            self.recovery_s,
+        ):
+            if not math.isfinite(value):
+                raise ValueError("PFR tuning parameters must be finite")
+        return self
+
+
+class IrTuningConfig(ConfigModel):
+    """惯量响应现场整定与 RoCoF 估计窗口；无默认值。"""
+
+    rocof_threshold_hz_per_s: float = Field(gt=0)
+    gain_mw_second_per_hz: float = Field(gt=0)
+    max_increase_mw: float = Field(ge=0)
+    max_decrease_mw: float = Field(ge=0)
+    rocof_window_s: float = Field(gt=0)
+    rocof_min_samples: int = Field(default=3, ge=3)
+    recovery_s: float = Field(default=0.0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_tuning(self) -> IrTuningConfig:
+        for value in (
+            self.rocof_threshold_hz_per_s,
+            self.gain_mw_second_per_hz,
+            self.max_increase_mw,
+            self.max_decrease_mw,
+            self.rocof_window_s,
+            self.recovery_s,
+        ):
+            if not math.isfinite(value):
+                raise ValueError("IR tuning parameters must be finite")
+        return self
+
+
+class FrequencyResponseConfig(ConfigModel):
+    """内部 PFR/IR 的频率测点与事件整定。"""
+
+    frequency_point: str = Field(min_length=1)
+    nominal_frequency_hz: float = Field(gt=0)
+    valid_for_s: float = Field(gt=0)
+    pfr: PfrTuningConfig | None = None
+    ir: IrTuningConfig | None = None
+
+    @model_validator(mode="after")
+    def validate_response(self) -> FrequencyResponseConfig:
+        if not math.isfinite(self.nominal_frequency_hz):
+            raise ValueError("nominal frequency must be finite")
+        if not math.isfinite(self.valid_for_s):
+            raise ValueError("frequency reference lifetime must be finite")
+        if self.pfr is None and self.ir is None:
+            raise ValueError("frequency response requires a PFR or IR tuning block")
         return self
 
 
 class ActivePlanningConfig(ConfigModel):
     target: str = Field(min_length=1)
+    mode: AgcMode = AgcMode.SETPOINT
     poi_device_id: str = Field(min_length=1)
     poi_active_point: str = Field(min_length=1)
+    poi_available_point: str | None = None
     minimum: float
     maximum: float
     devices: tuple[PlanningDeviceConfig, ...] = Field(min_length=1)
     authorized_sources: tuple[ReferenceSource, ...] = Field(min_length=1)
     reference_inputs: tuple[PlanningReferenceConfig, ...] = ()
     active_functions: tuple[CoordinationFunction, ...] = ()
+    frequency: FrequencyResponseConfig | None = None
     maximum_skew_ns: int = Field(default=500_000_000, gt=0)
 
     @model_validator(mode="after")
@@ -333,21 +411,98 @@ class ActivePlanningConfig(ConfigModel):
         reference_keys = [(item.purpose, item.source) for item in self.reference_inputs]
         if len(reference_keys) != len(set(reference_keys)):
             raise ValueError("duplicate planning reference input")
+        allowed_purposes = {
+            AgcMode.SETPOINT: {
+                ReferencePurpose.ACTIVE_BASE,
+                ReferencePurpose.PFR_DELTA,
+                ReferencePurpose.IR_DELTA,
+            },
+            AgcMode.LIMIT: {
+                ReferencePurpose.ACTIVE_LIMIT,
+                ReferencePurpose.PFR_DELTA,
+                ReferencePurpose.IR_DELTA,
+            },
+        }[self.mode]
+        if any(item.purpose not in allowed_purposes for item in self.reference_inputs):
+            raise ValueError(f"{self.mode}: unsupported planning reference purpose")
+        if self.mode == AgcMode.LIMIT and self.poi_available_point is None:
+            raise ValueError("LIMIT mode requires an available-power measurement")
+        if self.mode != AgcMode.LIMIT and self.poi_available_point is not None:
+            raise ValueError("available-power measurement is only used in LIMIT mode")
         if any(item.source not in self.authorized_sources for item in self.reference_inputs):
             raise ValueError("planning reference input source is not authorized")
         if len(self.active_functions) != len(set(self.active_functions)):
             raise ValueError("duplicate planning control function")
         if set(self.active_functions) - {CoordinationFunction.PFR, CoordinationFunction.IR}:
             raise ValueError("planning active functions support PFR and IR only")
+        if self.frequency is not None:
+            functions = set(self.active_functions)
+            if self.frequency.pfr is not None and CoordinationFunction.PFR not in functions:
+                raise ValueError("PFR tuning requires PFR in active_functions")
+            if self.frequency.ir is not None and CoordinationFunction.IR not in functions:
+                raise ValueError("IR tuning requires IR in active_functions")
+        return self
+
+
+class ReactivePlanningConfig(ConfigModel):
+    """AVC 无功规划：设备能力复用同任务有功规划的设备集合。"""
+
+    target: str = Field(min_length=1)
+    mode: AvcMode
+    poi_device_id: str = Field(min_length=1)
+    poi_reactive_point: str = Field(min_length=1)
+    poi_voltage_point: str | None = None
+    minimum: float
+    maximum: float
+    authorized_sources: tuple[ReferenceSource, ...] = Field(min_length=1)
+    reference_inputs: tuple[PlanningReferenceConfig, ...] = ()
+    maximum_skew_ns: int = Field(default=500_000_000, gt=0)
+
+    @model_validator(mode="after")
+    def validate_bindings(self) -> ReactivePlanningConfig:
+        if not math.isfinite(self.minimum) or not math.isfinite(self.maximum):
+            raise ValueError("reactive planning limits must be finite")
+        if self.minimum > self.maximum:
+            raise ValueError("reactive planning limits are inverted")
+        if len(self.authorized_sources) != len(set(self.authorized_sources)):
+            raise ValueError("duplicate reactive planning reference source")
+        allowed = {
+            ReferencePurpose.REACTIVE_BASE,
+            ReferencePurpose.VOLTAGE_BASE,
+            ReferencePurpose.POWER_FACTOR,
+        }
+        keys = [(item.purpose, item.source) for item in self.reference_inputs]
+        if len(keys) != len(set(keys)):
+            raise ValueError("duplicate reactive planning reference input")
+        for reference in self.reference_inputs:
+            if reference.purpose not in allowed:
+                raise ValueError("unsupported reactive planning reference purpose")
+            if reference.source not in self.authorized_sources:
+                raise ValueError("reactive planning reference source is not authorized")
+        required = MODE_PURPOSE[self.mode]
+        if not any(item.purpose == required for item in self.reference_inputs):
+            raise ValueError(f"{self.mode}: missing {required.value} reference input")
+        if self.mode == AvcMode.VOLTAGE and self.poi_voltage_point is None:
+            raise ValueError("VOLTAGE mode requires a POI voltage measurement")
+        if self.mode != AvcMode.VOLTAGE and self.poi_voltage_point is not None:
+            raise ValueError("voltage measurement is only used in VOLTAGE mode")
         return self
 
 
 class TaskConfig(ConfigModel):
     controller_id: str
     planning: ActivePlanningConfig | None = None
+    reactive_planning: ReactivePlanningConfig | None = None
     interval: float = Field(gt=0)
     enabled: bool = True
     resource_ids: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_planning_pair(self) -> TaskConfig:
+        # 无功规划复用有功规划的设备能力集合；纯无功任务尚无设备来源，暂不支持。
+        if self.reactive_planning is not None and self.planning is None:
+            raise ValueError("reactive planning requires the active planning device set")
+        return self
 
 
 class CoordinationParametersConfig(ConfigModel):
@@ -508,7 +663,8 @@ class CoordinationConfig(ConfigModel):
 class OrcaConfig(ConfigModel):
     site: SiteConfig
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
-    wind_hub: WindHubConfig = Field(default_factory=WindHubConfig)
+    # collector.target 无默认值，wind_hub 必须显式配置。
+    wind_hub: WindHubConfig
     resources: dict[str, ResourceConfig]
     controllers: dict[str, ControllerConfig]
     tasks: dict[str, TaskConfig]
@@ -522,8 +678,10 @@ class OrcaConfig(ConfigModel):
             if task.enabled and not self.controllers[task.controller_id].enabled:
                 raise ValueError(f"task {name}: controller disabled")
             if task.planning is not None:
-                if self.controllers[task.controller_id].type.lower() != "agc":
-                    raise ValueError(f"task {name}: active planning requires AGC controller")
+                controller_type = self.controllers[task.controller_id].type.lower()
+                expected = "pq" if task.reactive_planning is not None else "agc"
+                if controller_type != expected:
+                    raise ValueError(f"task {name}: planning requires {expected} controller")
                 for device in task.planning.devices:
                     if device.device_id not in task.resource_ids:
                         raise ValueError(
@@ -538,12 +696,24 @@ class OrcaConfig(ConfigModel):
                         raise ValueError(
                             f"task {name}: planning device measurement not registered"
                         )
+                algorithm = self.controllers[task.controller_id].pipeline.law.algorithm
+                if task.planning.mode == AgcMode.LIMIT and algorithm != "active_limit":
+                    raise ValueError(
+                        f"task {name}: LIMIT mode requires the active_limit control law"
+                    )
+                if task.planning.mode != AgcMode.LIMIT and algorithm == "active_limit":
+                    raise ValueError(
+                        f"task {name}: active_limit control law requires LIMIT mode"
+                    )
                 if task.planning.poi_device_id not in self.resources:
                     raise ValueError(
                         f"task {name}: planning POI resource is not configured"
                     )
                 poi = self.resources[task.planning.poi_device_id]
-                if task.planning.poi_active_point not in {
+                poi_required = {task.planning.poi_active_point}
+                if task.planning.poi_available_point is not None:
+                    poi_required.add(task.planning.poi_available_point)
+                if not poi_required <= {
                     point.point_id for point in poi.inputs.values()
                 }:
                     raise ValueError(f"task {name}: POI measurement not registered")
@@ -555,6 +725,74 @@ class OrcaConfig(ConfigModel):
                         point.point_id for point in resource.inputs.values()
                     }:
                         raise ValueError(f"task {name}: reference measurement not registered")
+                frequency = task.planning.frequency
+                if frequency is not None and frequency.frequency_point not in {
+                    point.point_id for point in poi.inputs.values()
+                }:
+                    raise ValueError(
+                        f"task {name}: frequency measurement not registered on POI"
+                    )
+                if task.planning.active_functions:
+                    controller = self.controllers[task.controller_id]
+                    policies = {
+                        (policy.purpose, policy.target): policy
+                        for policy in controller.references
+                    }
+                    internal_tuning = {
+                        CoordinationFunction.PFR: (
+                            ReferencePurpose.PFR_DELTA,
+                            frequency.pfr if frequency is not None else None,
+                        ),
+                        CoordinationFunction.IR: (
+                            ReferencePurpose.IR_DELTA,
+                            frequency.ir if frequency is not None else None,
+                        ),
+                    }
+                    for function in task.planning.active_functions:
+                        purpose, tuning = internal_tuning[function]
+                        policy = policies.get((purpose, task.planning.target))
+                        if policy is None:
+                            raise ValueError(
+                                f"task {name}: {function.value} requires a "
+                                f"{purpose.value} reference policy"
+                            )
+                        if policy.primary == ReferenceSource.INTERNAL and tuning is None:
+                            raise ValueError(
+                                f"task {name}: internal {function.value} requires "
+                                "frequency tuning"
+                            )
+                        if (
+                            policy.primary == ReferenceSource.INTERNAL
+                            and ReferenceSource.INTERNAL not in task.planning.authorized_sources
+                        ):
+                            raise ValueError(
+                                f"task {name}: internal {function.value} requires "
+                                "INTERNAL in authorized_sources"
+                            )
+                        if policy.primary != ReferenceSource.INTERNAL and tuning is not None:
+                            raise ValueError(
+                                f"task {name}: {function.value} tuning requires an "
+                                "INTERNAL primary reference policy"
+                            )
+            if task.reactive_planning is not None:
+                plan = task.reactive_planning
+                if plan.poi_device_id not in self.resources:
+                    raise ValueError(f"task {name}: reactive POI resource is not configured")
+                poi = self.resources[plan.poi_device_id]
+                registered = {point.point_id for point in poi.inputs.values()}
+                required = {plan.poi_reactive_point}
+                if plan.poi_voltage_point is not None:
+                    required.add(plan.poi_voltage_point)
+                if not required <= registered:
+                    raise ValueError(f"task {name}: reactive POI measurement not registered")
+                for reference in plan.reference_inputs:
+                    if reference.resource_id not in self.resources:
+                        raise ValueError(f"task {name}: reactive reference resource not registered")
+                    resource = self.resources[reference.resource_id]
+                    if reference.point_id not in {
+                        point.point_id for point in resource.inputs.values()
+                    }:
+                        raise ValueError(f"task {name}: reactive reference measurement not registered")
             for resource_id in task.resource_ids:
                 if resource_id not in self.resources:
                     raise ValueError(f"task {name}: unknown resource {resource_id}")

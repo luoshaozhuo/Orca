@@ -78,6 +78,20 @@ class ControlCoordinator:
             algorithm=resolved.algorithm,
             matched_rule=resolved.matched_rule,
             contributions=contributions,
+            base=context.base.value,
+            generation=max(
+                [context.base_generation]
+                + [demand.generation for demand in context.demands]
+            ),
+            event_ids=tuple(
+                sorted(
+                    {
+                        demand.event_id
+                        for demand in context.demands
+                        if demand.event_id is not None
+                    }
+                )
+            ),
         )
 
     def _resolve_policy(

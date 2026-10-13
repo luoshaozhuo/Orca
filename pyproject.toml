@@ -14,7 +14,7 @@ dependencies = ["pydantic>=2.8,<3", "PyYAML>=6,<7", "redis>=5,<7", "grpcio>=1.81
 orca = "cli.main:main"
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.24", "ruff>=0.6", "mypy>=1.10"]
+dev = ["pytest>=8", "pytest-asyncio>=0.24", "pytest-cov>=5", "ruff>=0.6", "mypy>=1.10", "types-PyYAML>=6"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/core", "src/algorithms", "src/control", "src/commissioning", "src/evaluation", "src/optimization", "src/infrastructure", "src/cli"]
@@ -24,9 +24,43 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 markers = [
     "integration: collaboration of actual components and services",
+    "system: full planning-to-dispatch chain with real Redis and mock gRPC",
+    "reliability: failure injection and robustness under fault scenarios",
+    "soak: short repeated-execution smoke; long soak runs on demand only",
     "real_service: requires a real local software service",
     "mock_service: uses a simulated network service",
 ]
 
 [tool.ruff]
 line-length = 100
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "src"
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["grpc", "grpc.*", "google.protobuf", "google.protobuf.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "infrastructure.wind_hub.rpc.collector_pb2",
+    "infrastructure.wind_hub.rpc.collector_pb2_grpc",
+    "infrastructure.wind_hub.rpc.commander_pb2",
+    "infrastructure.wind_hub.rpc.commander_pb2_grpc",
+]
+ignore_errors = true
+
+# pb2 消息类由 protobuf builder 在运行时生成，静态分析不可见。
+[[tool.mypy.overrides]]
+module = ["infrastructure.wind_hub.commander", "infrastructure.wind_hub.collector"]
+disable_error_code = ["attr-defined"]
+
+[tool.coverage.run]
+source = ["src"]
+omit = ["src/infrastructure/wind_hub/rpc/*"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_also = ["if TYPE_CHECKING:", "\\.\\.\\.", "raise NotImplementedError"]

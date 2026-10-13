@@ -6,12 +6,13 @@ from dataclasses import dataclass
 from core.application.reference_generators import (
     InertiaParameters,
     PFRParameters,
+    delta_reference,
     generate_inertia_reference,
     generate_pfr_reference,
 )
 from core.application.reference_manager import ReferenceManager
 from core.domain.control_authority import ControlAuthority, ControlFunction
-from core.domain.reference import ControlReference, ReferenceSource
+from core.domain.reference import ControlReference, ReferencePurpose, ReferenceSource
 
 
 @dataclass(slots=True)
@@ -49,6 +50,54 @@ class InternalReferenceService:
             generation=generation,
         )
         return self._publish(ControlFunction.PFR, reference)
+
+    def pfr_delta(
+        self,
+        delta_mw: float,
+        *,
+        target: str,
+        timestamp_ns: int,
+        valid_until_ns: int,
+        generation: int,
+        event_id: str | None = None,
+    ) -> ControlReference:
+        """发布事件状态机已确定的一次调频增量。"""
+        if not self.authority.can_output(ControlFunction.PFR):
+            raise RuntimeError("PFR: control function not permitted")
+        reference = delta_reference(
+            ReferencePurpose.PFR_DELTA,
+            delta_mw,
+            target=target,
+            timestamp_ns=timestamp_ns,
+            valid_until_ns=valid_until_ns,
+            generation=generation,
+            event_id=event_id,
+        )
+        return self._publish(ControlFunction.PFR, reference)
+
+    def ir_delta(
+        self,
+        delta_mw: float,
+        *,
+        target: str,
+        timestamp_ns: int,
+        valid_until_ns: int,
+        generation: int,
+        event_id: str | None = None,
+    ) -> ControlReference:
+        """发布事件状态机已确定的惯量响应增量。"""
+        if not self.authority.can_output(ControlFunction.IR):
+            raise RuntimeError("IR: control function not permitted")
+        reference = delta_reference(
+            ReferencePurpose.IR_DELTA,
+            delta_mw,
+            target=target,
+            timestamp_ns=timestamp_ns,
+            valid_until_ns=valid_until_ns,
+            generation=generation,
+            event_id=event_id,
+        )
+        return self._publish(ControlFunction.IR, reference)
 
     def inertia(
         self,

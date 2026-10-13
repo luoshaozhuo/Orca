@@ -1,7 +1,7 @@
-"""控制链集成测试：真实 Redis + 生产 RedisSource/CommanderClient + Mock Commander。
+"""Runtime 与看门狗集成测试：真实 Redis + 生产 RedisSource/CommanderClient + Mock Commander。
 
-配置由 configs/system.yaml 派生（测试命名空间 + 每测试唯一设备 ID），
-控制指令只发送给 Mock Commander。
+配置由 configs/system.yaml 派生（测试命名空间 + 每测试唯一设备 ID）。
+非规划任务只读预检查：任何情况下不产生设备写入。
 """
 from __future__ import annotations
 
@@ -10,12 +10,9 @@ from uuid import uuid4
 
 import pytest
 
-from control.cycle import ControlCycle
 from control.runtime import ControlRuntime
-from core.domain.decision import ControlDecision, Setpoint
 from infrastructure.redis.source import RedisSource
 from infrastructure.wind_hub.commander import CommanderClient
-from infrastructure.wind_hub.rpc import commander_pb2 as pb
 from infrastructure.wind_hub.watchdog import WindHubWatchdog
 from tests.integration.conftest import derive_test_config
 from tests.support.commander import CommanderPoint, CommanderScenario
@@ -28,16 +25,6 @@ pytestmark = [
 ]
 
 TASK = "active_power"
-
-
-class SimulatedStrategy:
-    def __init__(self, device: str) -> None:
-        self.device = device
-        self.calls: list[dict[str, dict[str, float]]] = []
-
-    def solve(self, measurements: dict[str, dict[str, float]]) -> ControlDecision:
-        self.calls.append(measurements)
-        return ControlDecision((Setpoint(self.device, "active_power_setpoint", 2.0),))
 
 
 def chain_scenario(device: str) -> CommanderScenario:
@@ -57,62 +44,40 @@ async def assemble(orca_config, commander_server):
     target, scenario = await commander_server(chain_scenario(device))
     source = RedisSource(config.wind_hub.redis, timeout=2.0)
     commander = CommanderClient(target, timeout=1.0)
-    strategy = SimulatedStrategy(device)
-    cycle = ControlCycle(config, source, commander, strategy)
-    return config, device, source, commander, cycle, scenario, strategy
+    return config, device, source, commander, scenario
 
 
-async def test_input_guards_and_write_path(orca_config, data_publisher, commander_server) -> None:
-    _config, device, source, commander, cycle, scenario, strategy = \
-        await assemble(orca_config, commander_server)
+async def test_read_only_task_never_writes(orca_config, data_publisher, commander_server) -> None:
+    config, device, source, commander, scenario = await assemble(orca_config, commander_server)
+    runtime = ControlRuntime(config, source)
     pair = (device, "active_power")
     try:
         await source.connect()
         await commander.connect()
-        assert await commander.status() == (True, "revision-a")
-        assert await commander.devices() == {device}
-        assert await commander.resolve_point(*pair) == "float32"
+        runtime.ready = True
+        await runtime.start_task(TASK)
 
-        # 缺测、坏质量、过期、非数值均不能到达算法和 Commander。
-        assert "missing" in (await cycle.execute(TASK, allow_write=True) or "")
+        # 缺测、坏质量、过期均记录原因；恢复后原因清除。
+        await asyncio.sleep(0.2)
+        assert "missing" in runtime.reasons.get(TASK, "")
         await data_publisher.publish(*pair, 1.5, quality="bad")
-        assert "bad quality" in (await cycle.execute(TASK, allow_write=True) or "")
+        await asyncio.sleep(1.2)
+        assert "bad quality" in runtime.reasons.get(TASK, "")
         await data_publisher.publish(*pair, 1.5, age_seconds=60)
-        assert "stale" in (await cycle.execute(TASK, allow_write=True) or "")
-        await data_publisher.publish(*pair, "not-a-number")
-        assert "numeric" in (await cycle.execute(TASK, allow_write=True) or "")
-        assert strategy.calls == []
-        assert scenario.writes == []
-
-        # 未授权写入时不下发。
+        await asyncio.sleep(1.2)
+        assert "stale" in runtime.reasons.get(TASK, "")
         await data_publisher.publish(*pair, 1.75)
-        assert await cycle.execute(TASK, allow_write=False) is not None
-        assert not scenario.writes
-
-        # 授权后完整链路：算法求解 + 指令下发。
-        assert await cycle.execute(TASK, allow_write=True) is None
-        assert strategy.calls[-1] == {device: {"active_power": 1.75}}
-        assert len(scenario.writes) == 1
-        written = scenario.writes[0]
-        assert written.device_id == device
-        assert written.point_id == "active_power_setpoint"
-        assert written.value.double_value == 2.0
-        assert written.command_id
-
-        # UNKNOWN 不重传历史命令，command_id 唯一。
-        scenario.outcome = pb.COMMAND_OUTCOME_UNKNOWN
-        result = await cycle.execute(TASK, allow_write=True)
-        assert result is not None and "UNKNOWN" in result
-        assert len(scenario.writes) == 2
-        assert len({write.command_id for write in scenario.writes}) == 2
+        await asyncio.sleep(1.2)
+        assert TASK not in runtime.reasons
+        assert scenario.writes == []
     finally:
+        await runtime.stop()
         await commander.close()
         await source.close()
 
 
 async def test_watchdog_health_and_revision_revalidation(orca_config, commander_server) -> None:
-    config, _, source, commander, _, scenario, _ = \
-        await assemble(orca_config, commander_server)
+    config, _, source, commander, scenario = await assemble(orca_config, commander_server)
     runtime = ControlRuntime(config, source)
     watchdog = WindHubWatchdog(config, runtime, source, commander)
     try:
@@ -144,8 +109,7 @@ async def test_watchdog_health_and_revision_revalidation(orca_config, commander_
 
 
 async def test_watchdog_metadata_mismatch_interlocks(orca_config, commander_server) -> None:
-    config, device, source, commander, _, scenario, _ = \
-        await assemble(orca_config, commander_server)
+    config, device, source, commander, scenario = await assemble(orca_config, commander_server)
     # 配置声明 float32，Mock Commander 报告 int32：元数据不匹配必须闭锁。
     resource = config.resources[device]
     inputs = {
@@ -173,9 +137,8 @@ async def test_watchdog_metadata_mismatch_interlocks(orca_config, commander_serv
 
 
 async def test_runtime_task_lifecycle_and_cancel(orca_config, data_publisher, commander_server) -> None:
-    config, device, source, commander, cycle, scenario, _ = \
-        await assemble(orca_config, commander_server)
-    runtime = ControlRuntime(config, source, cycle)
+    config, device, source, commander, scenario = await assemble(orca_config, commander_server)
+    runtime = ControlRuntime(config, source)
     try:
         await source.connect()
         await commander.connect()
@@ -187,9 +150,8 @@ async def test_runtime_task_lifecycle_and_cancel(orca_config, data_publisher, co
         await runtime.start_task(TASK)
         assert runtime.states[TASK] == "RUNNING"
         await asyncio.sleep(1.5)
-        # 输出权限未验证：运行中也不写设备，原因明确。
+        # 只读任务：运行中也不写设备。
         assert not scenario.writes
-        assert "output disabled" in runtime.reasons.get(TASK, "")
         # 取消任务并释放输出所有权。
         await runtime.stop_task(TASK)
         assert runtime.states[TASK] == "STOPPED"

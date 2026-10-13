@@ -10,6 +10,7 @@ from core.application.active_power_controller import ActivePowerController
 from core.application.control_trajectory import RampTrajectory
 from core.application.joint_power_allocator import JointAllocationResult, JointPowerAllocator
 from core.application.port.planning_snapshot import PlanningSnapshotPort
+from core.application.reactive_power_controller import ReactivePowerController
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,6 +43,7 @@ class ReadOnlyPlanningCycle:
         *,
         maximum_age_ns: int,
         permitted: Callable[[str], bool] | None = None,
+        reactive_controllers: dict[str, ReactivePowerController] | None = None,
     ) -> None:
         if maximum_age_ns <= 0:
             raise ValueError("planning maximum age must be positive")
@@ -50,6 +52,7 @@ class ReadOnlyPlanningCycle:
         self._allocator = allocator
         self._maximum_age_ns = maximum_age_ns
         self._permitted = permitted
+        self._reactive_controllers = reactive_controllers or {}
 
     async def execute(self, task_id: str) -> PlanningCycleResult:
         if task_id not in self._controllers:
@@ -69,10 +72,16 @@ class ReadOnlyPlanningCycle:
                 snapshot.active.law_input()
                 ramp.initialize(snapshot.active.measurement.value)
             control = controller.evaluate(snapshot.active)
+            q_target: float | None = None
+            if snapshot.reactive is not None:
+                reactive_controller = self._reactive_controllers.get(task_id)
+                if reactive_controller is None:
+                    raise ValueError(f"no reactive planning controller for {task_id}")
+                q_target = reactive_controller.evaluate(snapshot.reactive).value
             allocation = self._allocator.allocate(
                 snapshot.devices,
                 p_target=control.coordination.target.value,
-                q_target=None,
+                q_target=q_target,
                 now_ns=started_at_ns,
                 maximum_age_ns=self._maximum_age_ns,
             )
@@ -104,6 +113,9 @@ class ReadOnlyPlanningCycle:
             )
         except BaseException:
             controller.reset()
+            reactive_controller = self._reactive_controllers.get(task_id)
+            if reactive_controller is not None:
+                reactive_controller.reset()
             raise
 
     def replace_controller(
@@ -119,7 +131,23 @@ class ReadOnlyPlanningCycle:
         controller.reset()
         self._controllers[task_id] = controller
 
+    def replace_reactive_controller(
+        self,
+        task_id: str,
+        controller: ReactivePowerController,
+    ) -> None:
+        """仅由已停止任务的生命周期管理者调用；不做运行期无扰假设。"""
+        previous = self._reactive_controllers.get(task_id)
+        if previous is None:
+            raise ValueError(f"no reactive planning controller for {task_id}")
+        previous.reset()
+        controller.reset()
+        self._reactive_controllers[task_id] = controller
+
     def reset(self, task_id: str) -> None:
         controller = self._controllers.get(task_id)
         if controller is not None:
             controller.reset()
+        reactive_controller = self._reactive_controllers.get(task_id)
+        if reactive_controller is not None:
+            reactive_controller.reset()

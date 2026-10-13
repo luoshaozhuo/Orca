@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from core.application.active_power_controller import ActivePowerCycle
+from core.application.reactive_power_controller import ReactivePowerCycle
 from core.domain.capability_snapshot import DeviceCapabilitySnapshot
 
 
@@ -16,6 +17,7 @@ class PlanningSnapshot:
     devices: DeviceCapabilitySnapshot
     acquired_at_ns: int
     expires_at_ns: int | None = None
+    reactive: ReactivePowerCycle | None = None
 
     def __post_init__(self) -> None:
         if self.acquired_at_ns < 0:

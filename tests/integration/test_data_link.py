@@ -5,6 +5,7 @@ Redis 服务由 scripts/start_redis.sh 独立管理；不可用时明确失败�
 from __future__ import annotations
 
 import asyncio
+import json
 
 import pytest
 import redis.asyncio as redis
@@ -12,6 +13,7 @@ import redis.asyncio as redis
 from core.domain.config import RedisConfig
 from infrastructure.redis.source import RedisSource, resolve_password
 from tests.integration.conftest import TEST_DEVICE
+from tests.support.redis_data import test_prefix as make_test_prefix
 
 # 专用测点：与控制链测试的键完全隔离（共享 Redis，键不重叠）。
 PAIR = (TEST_DEVICE, "link_check_power")
@@ -95,3 +97,51 @@ async def test_published_keys_expire_automatically(data_publisher, redis_source)
     await data_publisher.publish(*PAIR, 9.9, ttl_seconds=1)
     await asyncio.sleep(1.5)
     assert await redis_source.latest([PAIR]) == {}
+
+
+async def test_malformed_record_rejected_then_recovers(
+    data_publisher, redis_client, redis_source,
+) -> None:
+    # 非法 JSON 与缺字段记录都是明确错误；修复后读取恢复，无残留状态。
+    key = RedisSource.key(data_publisher.prefix, *PAIR)
+    await redis_client.set(key, "{not-json", ex=60)
+    with pytest.raises(ValueError):
+        await redis_source.latest([PAIR])
+    await redis_client.set(key, json.dumps({"value": 1.0}), ex=60)
+    with pytest.raises(ValueError, match="malformed"):
+        await redis_source.latest([PAIR])
+    await data_publisher.publish(*PAIR, 3.0)
+    assert (await redis_source.latest([PAIR]))[PAIR]["value"] == 3.0
+
+
+async def test_concurrent_batch_reads_are_consistent(data_publisher, redis_source) -> None:
+    pairs = [(TEST_DEVICE, f"concurrent_power_{index}") for index in range(16)]
+    for index, pair in enumerate(pairs):
+        await data_publisher.publish(*pair, float(index))
+    expected = {pair: float(index) for index, pair in enumerate(pairs)}
+    results = await asyncio.gather(*(redis_source.latest(pairs) for _ in range(16)))
+    for records in results:
+        assert {pair: record["value"] for pair, record in records.items()} == expected
+
+
+async def test_client_close_and_reconnect_has_no_residual_state(
+    data_publisher, redis_config: RedisConfig,
+) -> None:
+    config = redis_config.model_copy(
+        update={"key_prefix": make_test_prefix(redis_config.key_prefix)}
+    )
+    source = RedisSource(config, timeout=2.0)
+    try:
+        with pytest.raises(ConnectionError):
+            await source.latest([PAIR])
+        await source.connect()
+        await data_publisher.publish(*PAIR, 4.0)
+        assert (await source.latest([PAIR]))[PAIR]["value"] == 4.0
+        await source.close()
+        with pytest.raises(ConnectionError):
+            await source.latest([PAIR])
+        # 重连后恢复读取，数据来自服务端而非客户端缓存。
+        await source.connect()
+        assert (await source.latest([PAIR]))[PAIR]["value"] == 4.0
+    finally:
+        await source.close()

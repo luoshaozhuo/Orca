@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import secrets
 import shutil
@@ -16,6 +17,10 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+import redis.asyncio as redis
+
+from core.domain.config import RedisConfig
+from infrastructure.redis.source import RedisSource
 
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "scripts" / "start_redis.sh"
@@ -33,12 +38,13 @@ def _docker(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 class Deployment:
-    def __init__(self, name: str, network: str, port: int, username: str, password: str) -> None:
+    def __init__(self, name: str, network: str, port: int, username: str, password: str, password_file: str) -> None:
         self.name = name
         self.network = network
         self.port = port
         self.username = username
         self.password = password
+        self.password_file = password_file
 
     def client_cli(self, *args: str, password: str | None = None, username: str | None = None) -> subprocess.CompletedProcess[str]:
         """从独立网络的客户端容器经宿主机发布地址访问 Redis。"""
@@ -74,7 +80,7 @@ def deployment(tmp_path: Path):
         ORCA_REDIS_PASSWORD=password,
         REDIS_HEALTH_TIMEOUT="30",
     )
-    dep = Deployment(name, network, port, username, password)
+    dep = Deployment(name, network, port, username, password, env["REDIS_PASSWORD_FILE"])
     try:
         result = subprocess.run(
             ["bash", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=120, check=False,
@@ -143,3 +149,45 @@ def test_data_survives_restart_over_network(deployment: Deployment) -> None:
 
     read = deployment.client_cli("get", "orca:marker", password=deployment.password)
     assert marker in read.stdout
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+@pytest.mark.real_service
+async def test_orca_client_survives_server_stop_and_restart(deployment: Deployment) -> None:
+    """生产 RedisSource 经发布端口访问真实服务：停止期间有界失败，重启后自动恢复。"""
+    _wait_client_ping(deployment)
+    config = RedisConfig(
+        port=deployment.port,
+        key_prefix="windhub-nettest",
+        username=deployment.username,
+        password_file=deployment.password_file,
+    )
+    source = RedisSource(config, timeout=2.0)
+    await source.connect()
+    pair = ("nettest-wtg", "active_power")
+    key = RedisSource.key(config.key_prefix, *pair)
+    payload = (
+        '{"value": 3.25, "quality": "good", "timestamp": "2026-10-14T00:00:00+00:00"}'
+    )
+    written = deployment.client_cli("set", key, payload, password=deployment.password)
+    assert "OK" in written.stdout, written.stderr
+    assert (await source.latest([pair]))[pair]["value"] == 3.25
+
+    # 服务停止：读取是有界失败而非挂起。
+    assert _docker("stop", deployment.name).returncode == 0
+    with pytest.raises((redis.RedisError, OSError)):
+        await source.latest([pair])
+
+    # 重启后同一客户端自动恢复，数据来自服务端持久化而非客户端缓存。
+    assert _docker("start", deployment.name).returncode == 0
+    _wait_client_ping(deployment)
+    records: dict = {}
+    for _ in range(30):
+        try:
+            records = await source.latest([pair])
+            break
+        except (redis.RedisError, OSError):
+            await asyncio.sleep(1)
+    await source.close()
+    assert records[pair]["value"] == 3.25

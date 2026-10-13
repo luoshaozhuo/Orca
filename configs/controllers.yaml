@@ -5,11 +5,9 @@
 #   direct: 无额外参数；p: kp；pi: kp、ki，kaw 可选。
 # kp、ki、kaw 均为非负有限数；增益单位及采样周期须与现场整定一致。
 # ramp 限速单位为参考值单位/秒，首次运行前必须用可信实际输出初始化。
-# 当前 strategy: noop 仍为唯一允许投入的运行策略。
 controllers:
   agc:
     type: agc
-    strategy: noop
     enabled: true
     pipeline:
       signal:

@@ -26,8 +26,13 @@ class ControlLawInput:
 
     def __post_init__(self) -> None:
         ref, meas = self.reference, self.measurement
-        if ref.role != ControlValueRole.REFERENCE or ref.kind != ControlValueKind.ABSOLUTE:
-            raise ValueError("control law requires an absolute reference")
+        reference_kinds = {
+            ControlValueKind.ABSOLUTE,
+            ControlValueKind.UPPER_LIMIT,
+            ControlValueKind.LOWER_LIMIT,
+        }
+        if ref.role != ControlValueRole.REFERENCE or ref.kind not in reference_kinds:
+            raise ValueError("control law requires an absolute or limit reference")
         if meas.role != ControlValueRole.MEASUREMENT or meas.kind != ControlValueKind.ABSOLUTE:
             raise ValueError("control law requires an absolute measurement")
         if ref.quantity != meas.quantity or ref.scope != meas.scope:
