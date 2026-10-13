@@ -225,6 +225,26 @@ class ControlApplication:
         if pipeline is not None:
             pipeline.reset()
 
+    def install_dispatch_bindings(
+        self,
+        bindings: tuple[OutputBinding, ...],
+        *,
+        authorized: bool,
+    ) -> None:
+        """校验输出映射并安装执行器，保持现有写入门禁关闭。"""
+        if not authorized:
+            raise PermissionError("dispatch installation requires authorization")
+        validate_dispatch_bindings(self.config, bindings)
+        dispatcher = SafePlanDispatcher(
+            self.commander,
+            bindings,
+            maximum_age_ns=int(self.config.wind_hub.watchdog.interval * 1e9),
+            permitted=self.runtime._can_write_task,
+            generation=lambda: self.config.runtime.planning_generation,
+            output_owner=self.runtime.output_owner,
+        )
+        self.runtime.install_dispatcher(dispatcher)
+
     def replace_task_pipeline(
         self,
         task_id: str,
