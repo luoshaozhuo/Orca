@@ -99,7 +99,10 @@ def make_service(
     source: RedisSource,
     *,
     ir: bool,
+    both: bool = False,
 ) -> FrequencyResponseService:
+    pfr_on = not ir or both
+    ir_on = ir or both
     return FrequencyResponseService(
         internal=InternalReferenceService(manager, authority),
         source=source,
@@ -111,20 +114,23 @@ def make_service(
         maximum_age_ns=5 * SECOND,
         base_purpose=ReferencePurpose.ACTIVE_BASE,
         authorized_sources=frozenset({ReferenceSource.GRID, ReferenceSource.INTERNAL}),
-        pfr=None if ir else PfrEventMachine(
-            PFRParameters(50.0, 0.05, 10.0, 6.0, 10.0),
+        pfr=(
+            PfrEventMachine(PFRParameters(50.0, 0.05, 10.0, 6.0, 10.0))
+            if pfr_on else None
         ),
         ir=(
             IrEventMachine(
                 InertiaParameters(50.0, 8.0, 8.0), threshold_hz_per_s=0.1,
             )
-            if ir else None
+            if ir_on else None
         ),
-        rocof=RocofEstimator(window_s=1.0, min_samples=3) if ir else None,
+        rocof=RocofEstimator(window_s=1.0, min_samples=3) if ir_on else None,
     )
 
 
-def planning_bindings(*, ir: bool) -> dict[str, ActivePlanningBinding]:
+def planning_bindings(
+    *, ir: bool, both: bool = False
+) -> dict[str, ActivePlanningBinding]:
     return {
         TASK: ActivePlanningBinding(
             target="POI",
@@ -154,7 +160,9 @@ def planning_bindings(*, ir: bool) -> dict[str, ActivePlanningBinding]:
                 ),
             ),
             active_functions=frozenset(
-                {CoordinationFunction.IR if ir else CoordinationFunction.PFR}
+                {CoordinationFunction.PFR, CoordinationFunction.IR}
+                if both
+                else {CoordinationFunction.IR if ir else CoordinationFunction.PFR}
             ),
         ),
     }
@@ -174,7 +182,9 @@ async def publish_frequency(publisher: DataPublisher, value: float, offset_s: fl
     await publisher.publish(POI, "freq", value, timestamp=iso_offset(offset_s))
 
 
-async def assemble(redis_config, data_publisher: DataPublisher, *, ir: bool):
+async def assemble(
+    redis_config, data_publisher: DataPublisher, *, ir: bool, both: bool = False
+):
     source = RedisSource(
         redis_config.model_copy(
             update={"key_prefix": make_test_prefix(redis_config.key_prefix)}
@@ -190,9 +200,9 @@ async def assemble(redis_config, data_publisher: DataPublisher, *, ir: bool):
     authority.put_in_service(ControlFunction.PFR, authorized=True)
     authority.request_in_service(ControlFunction.IR, operator="test")
     authority.put_in_service(ControlFunction.IR, authorized=True)
-    service = make_service(manager, authority, source, ir=ir)
+    service = make_service(manager, authority, source, ir=ir, both=both)
     snapshot_source = RedisPlanningSnapshotSource(
-        source, manager, planning_bindings(ir=ir),
+        source, manager, planning_bindings(ir=ir, both=both),
         generation=GENERATION, maximum_age_ns=5_000_000_000,
         can_plan=lambda task, device, quantity: quantity == ControlQuantity.ACTIVE_POWER,
         can_contribute=lambda task, function: True,
@@ -339,6 +349,58 @@ async def test_internal_ir_event_drives_dispatch(
 
         # 频率企稳：RoCoF 回落阈值内，事件闭合并停止贡献。
         await feed([49.70, 49.70, 49.70])
+        assert service.ir.phase != ResponsePhase.RESPONDING
+        assert await dispatch(cycle, dispatcher, scenario) == pytest.approx(6.0)
+    finally:
+        await commander.close()
+        await source.close()
+        await server.stop(grace=0)
+
+
+async def test_internal_pfr_and_ir_events_compose(
+    redis_config, data_publisher: DataPublisher,
+) -> None:
+    """PFR 与 IR 事件同时激活：增量独立叠加，退出互不干扰。"""
+    await publish_plant(data_publisher)
+    source, service, cycle, dispatcher, scenario, server, commander = await assemble(
+        redis_config, data_publisher, ir=False, both=True,
+    )
+    try:
+        async def feed(values: list[float]) -> None:
+            for value in values:
+                await publish_frequency(data_publisher, value)
+                await asyncio.sleep(0.25)
+                await service.update(time.time_ns())
+
+        # 估计窗口预热：平坦样本，两事件均不触发。
+        await feed([50.00, 50.00, 50.00])
+        assert await dispatch(cycle, dispatcher, scenario) == pytest.approx(6.0)
+
+        # 频率斜坡下降约 0.4 Hz/s 且越过死区：PFR 与 IR 同时进入。
+        await feed([49.90, 49.80])
+        assert service.pfr is not None and service.ir is not None
+        assert service.pfr.phase == ResponsePhase.RESPONDING
+        assert service.ir.phase == ResponsePhase.RESPONDING
+        assert service.pfr.event is not None and service.ir.event is not None
+        pfr_event = service.pfr.event.event_id
+        ir_event = service.ir.event.event_id
+        assert pfr_event != ir_event
+        # AGC 6.0 + PFR (0.20−0.05)×10=1.5 + IR 限幅 8.0。
+        assert await dispatch(cycle, dispatcher, scenario) == pytest.approx(15.5)
+
+        # 频率企稳在死区外：IR 退出，PFR 事件保持且标识不变。
+        await feed([49.80, 49.80, 49.80])
+        assert service.ir.phase != ResponsePhase.RESPONDING
+        assert service.pfr.phase == ResponsePhase.RESPONDING
+        assert service.pfr.event is not None
+        assert service.pfr.event.event_id == pfr_event
+        assert await dispatch(cycle, dispatcher, scenario) == pytest.approx(7.5)
+
+        # 频率以 0.08 Hz/s（RoCoF 阈值内）缓慢回到死区：不再触发 IR
+        # 下调节事件，PFR 退出，目标回到 AGC 基准。
+        gentle = [round(49.80 + 0.02 * step, 2) for step in range(1, 12)]
+        await feed(gentle)
+        assert service.pfr.phase != ResponsePhase.RESPONDING
         assert service.ir.phase != ResponsePhase.RESPONDING
         assert await dispatch(cycle, dispatcher, scenario) == pytest.approx(6.0)
     finally:
