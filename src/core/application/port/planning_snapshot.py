@@ -15,10 +15,13 @@ class PlanningSnapshot:
     active: ActivePowerCycle
     devices: DeviceCapabilitySnapshot
     acquired_at_ns: int
+    expires_at_ns: int | None = None
 
     def __post_init__(self) -> None:
         if self.acquired_at_ns < 0:
             raise ValueError("planning snapshot timestamp must be nonnegative")
+        if self.expires_at_ns is not None and self.expires_at_ns <= self.acquired_at_ns:
+            raise ValueError("planning snapshot expiration must follow acquisition")
 
 
 class PlanningSnapshotPort(Protocol):
