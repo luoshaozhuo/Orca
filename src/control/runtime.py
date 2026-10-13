@@ -109,6 +109,12 @@ class ControlRuntime:
         self.states[task_id] = "RUNNING"
         self._workers[task_id] = asyncio.create_task(self._run_task(task_id))
 
+    def install_dispatcher(self, dispatcher: SafePlanDispatcher) -> None:
+        """只能在全部任务停止且写入关闭时安装已校验执行器。"""
+        if self.write_enabled or any(state != "STOPPED" for state in self.states.values()):
+            raise RuntimeError("dispatcher installation requires disabled writes and stopped tasks")
+        self._dispatcher = dispatcher
+
     def clear_dispatch_block(self, task_id: str, *, authorized: bool) -> None:
         """仅任务停止后人工授权清除 UNKNOWN 闭锁，不自动补发。"""
         if not authorized:
