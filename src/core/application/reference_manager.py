@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
-from core.domain.config import ControllerConfig
 from core.domain.reference import (
     ControlReference,
     ReferencePurpose,
@@ -14,6 +14,10 @@ from core.domain.reference import (
     ReferenceSource,
     select_reference,
 )
+
+
+if TYPE_CHECKING:
+    from core.domain.config import ControllerConfig
 
 
 ReferenceKey = tuple[ReferencePurpose, str]
@@ -40,7 +44,7 @@ class ReferenceManager:
     @classmethod
     def from_controllers(
         cls,
-        controllers: dict[str, ControllerConfig],
+        controllers: dict[str, "ControllerConfig"],
     ) -> ReferenceManager:
         """由已验证的控制器配置建立来源策略；跨控制器的键不可重复。"""
         policies: dict[ReferenceKey, ReferenceSelection] = {}
