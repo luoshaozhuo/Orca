@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, Protocol, cast
@@ -12,6 +13,7 @@ from core.domain.config import OrcaConfig
 from core.domain.control_authority import ControlAuthority, ControlFunction
 
 if TYPE_CHECKING:
+    from core.application.frequency_response import FrequencyResponseService
     from core.application.read_only_planning_cycle import (
         PlanningCyclePort,
         PlanningCycleResult,
@@ -60,6 +62,7 @@ class ControlRuntime:
         self._planning_cycle = planning_cycle
         self._planning_tasks = planning_tasks
         self._dispatcher = dispatcher
+        self._internal_references: dict[str, FrequencyResponseService] = {}
         self.dispatch_blocked: dict[str, str] = {}
         self._inflight_dispatch: set[str] = set()
         self.planning_results: dict[str, PlanningCycleResult] = {}
@@ -76,6 +79,8 @@ class ControlRuntime:
         functions: set[ControlFunction] = set()
         if task.planning is not None:
             functions.add(ControlFunction.AGC)
+            for active in task.planning.active_functions:
+                functions.add(ControlFunction(active.value.upper()))
         if task.reactive_planning is not None:
             functions.add(ControlFunction.AVC)
         if not functions:
@@ -151,6 +156,17 @@ class ControlRuntime:
         self.states[task_id] = TaskState.RUNNING
         self._workers[task_id] = asyncio.create_task(self._run_task(task_id))
 
+    def install_internal_references(
+        self,
+        services: dict[str, FrequencyResponseService],
+    ) -> None:
+        """只能在全部任务停止时装配内部 PFR/IR 参考服务。"""
+        if any(state != TaskState.STOPPED for state in self.states.values()):
+            raise RuntimeError("internal reference installation requires stopped tasks")
+        if set(services) - self._planning_tasks:
+            raise ValueError("internal references require a planning task")
+        self._internal_references = dict(services)
+
     def install_dispatcher(self, dispatcher: SafePlanDispatcher) -> None:
         """只能在全部任务停止且写入关闭时安装已校验执行器。"""
         if self.write_enabled or any(state != TaskState.STOPPED for state in self.states.values()):
@@ -175,6 +191,8 @@ class ControlRuntime:
         self.planning_results.pop(task_id, None)
         if self._planning_cycle is not None and task_id in self._planning_tasks:
             self._planning_cycle.reset(task_id)
+        if (service := self._internal_references.get(task_id)) is not None:
+            service.reset()
         if self._reset_control_state is not None:
             self._reset_control_state(task_id)
 
@@ -228,6 +246,9 @@ class ControlRuntime:
                     ]
                     if task_id in self._planning_tasks:
                         assert self._planning_cycle is not None
+                        if (service := self._internal_references.get(task_id)) is not None:
+                            # 内部 PFR/IR 参考必须先于规划快照发布。
+                            await service.update(time.time_ns())
                         result = await self._planning_cycle.execute(task_id)
                         self.planning_results[task_id] = result
                         if self._dispatcher is not None and self.write_enabled:

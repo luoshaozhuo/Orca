@@ -12,12 +12,20 @@ from core.application.control_pipeline_factory import (
     build_reactive_controller,
 )
 from core.application.dispatch_mapping import validate_dispatch_bindings
+from core.application.frequency_response import (
+    FrequencyResponseService,
+    IrEventMachine,
+    PfrEventMachine,
+    RocofEstimator,
+)
 from core.application.internal_reference import InternalReferenceService
 from core.application.joint_power_allocator import JointPowerAllocator
 from core.application.port.planning_snapshot import PlanningSnapshotPort
 from core.application.read_only_planning_cycle import ReadOnlyPlanningCycle
+from core.application.reference_generators import InertiaParameters, PFRParameters
 from core.application.reference_manager import ReferenceManager
 from core.application.safe_plan_dispatcher import SafePlanDispatcher
+from core.domain.agc import MODE_PURPOSE as AGC_MODE_PURPOSE
 from core.domain.config import ControlPipelineConfig, OrcaConfig
 from core.domain.control_authority import ControlFunction
 from core.domain.control_value import ControlQuantity
@@ -205,6 +213,57 @@ class ControlApplication:
         self.internal_references = InternalReferenceService(
             self.references, self.runtime.control_authority,
         )
+        self.frequency_services = {
+            task_id: FrequencyResponseService(
+                internal=self.internal_references,
+                source=self.redis,
+                device_id=active_plan.poi_device_id,
+                point_id=frequency.frequency_point,
+                target=active_plan.target,
+                valid_for_ns=int(frequency.valid_for_s * 1e9),
+                generation=config.runtime.planning_generation,
+                maximum_age_ns=int(config.wind_hub.watchdog.interval * 1e9),
+                base_purpose=AGC_MODE_PURPOSE[active_plan.mode],
+                authorized_sources=frozenset(active_plan.authorized_sources),
+                pfr=(
+                    PfrEventMachine(
+                        PFRParameters(
+                            nominal_frequency_hz=frequency.nominal_frequency_hz,
+                            deadband_hz=frequency.pfr.deadband_hz,
+                            gain_mw_per_hz=frequency.pfr.gain_mw_per_hz,
+                            max_increase_mw=frequency.pfr.max_increase_mw,
+                            max_decrease_mw=frequency.pfr.max_decrease_mw,
+                        ),
+                        recovery_s=frequency.pfr.recovery_s,
+                    )
+                    if frequency.pfr is not None else None
+                ),
+                ir=(
+                    IrEventMachine(
+                        InertiaParameters(
+                            gain_mw_second_per_hz=frequency.ir.gain_mw_second_per_hz,
+                            max_increase_mw=frequency.ir.max_increase_mw,
+                            max_decrease_mw=frequency.ir.max_decrease_mw,
+                        ),
+                        threshold_hz_per_s=frequency.ir.rocof_threshold_hz_per_s,
+                        recovery_s=frequency.ir.recovery_s,
+                    )
+                    if frequency.ir is not None else None
+                ),
+                rocof=(
+                    RocofEstimator(
+                        window_s=frequency.ir.rocof_window_s,
+                        min_samples=frequency.ir.rocof_min_samples,
+                    )
+                    if frequency.ir is not None else None
+                ),
+            )
+            for task_id in planning_tasks
+            if (active_plan := config.tasks[task_id].planning) is not None
+            and (frequency := active_plan.frequency) is not None
+        }
+        if self.frequency_services:
+            self.runtime.install_internal_references(self.frequency_services)
         self.watchdog = WindHubWatchdog(config, self.runtime, self.redis, self.commander)
         self._server: asyncio.AbstractServer | None = None
         self._socket = Path(config.runtime.socket_path)
@@ -364,6 +423,10 @@ class ControlApplication:
                     self.runtime.control_authority.can_output(function)
                     for function in self.runtime.task_functions(task_id)
                 )
+            },
+            "frequency_response": {
+                task_id: service.diagnostics()
+                for task_id, service in self.frequency_services.items()
             },
             "authority_mode": self.runtime.control_authority.mode.value,
             "control_functions": {

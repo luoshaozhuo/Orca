@@ -71,6 +71,7 @@ def _reference(
     timestamp_ns: int,
     valid_until_ns: int,
     generation: int,
+    event_id: str | None = None,
 ) -> ControlReference:
     control = ControlValue(
         quantity=ControlQuantity.ACTIVE_POWER,
@@ -88,6 +89,28 @@ def _reference(
         timestamp_ns=timestamp_ns,
         valid_until_ns=valid_until_ns,
         generation=generation,
+        sequence_id=timestamp_ns,
+        event_id=event_id,
+    )
+
+
+def delta_reference(
+    purpose: ReferencePurpose,
+    value: float,
+    *,
+    target: str,
+    timestamp_ns: int,
+    valid_until_ns: int,
+    generation: int,
+    event_id: str | None = None,
+) -> ControlReference:
+    """事件状态机已确定的功率增量参考；数值必须有限且属于增量用途。"""
+    if purpose not in (ReferencePurpose.PFR_DELTA, ReferencePurpose.IR_DELTA):
+        raise ValueError("delta reference requires a delta purpose")
+    if not math.isfinite(value):
+        raise ValueError("delta reference value must be finite")
+    return _reference(
+        purpose, target, value, timestamp_ns, valid_until_ns, generation, event_id,
     )
 
 

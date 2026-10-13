@@ -313,6 +313,75 @@ class PlanningReferenceConfig(ConfigModel):
         return self
 
 
+class PfrTuningConfig(ConfigModel):
+    """一次调频现场整定；无默认值，必须按批准定值配置。"""
+
+    deadband_hz: float = Field(gt=0)
+    gain_mw_per_hz: float = Field(gt=0)
+    max_increase_mw: float = Field(ge=0)
+    max_decrease_mw: float = Field(ge=0)
+    recovery_s: float = Field(default=0.0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_tuning(self) -> PfrTuningConfig:
+        for value in (
+            self.deadband_hz,
+            self.gain_mw_per_hz,
+            self.max_increase_mw,
+            self.max_decrease_mw,
+            self.recovery_s,
+        ):
+            if not math.isfinite(value):
+                raise ValueError("PFR tuning parameters must be finite")
+        return self
+
+
+class IrTuningConfig(ConfigModel):
+    """惯量响应现场整定与 RoCoF 估计窗口；无默认值。"""
+
+    rocof_threshold_hz_per_s: float = Field(gt=0)
+    gain_mw_second_per_hz: float = Field(gt=0)
+    max_increase_mw: float = Field(ge=0)
+    max_decrease_mw: float = Field(ge=0)
+    rocof_window_s: float = Field(gt=0)
+    rocof_min_samples: int = Field(default=3, ge=3)
+    recovery_s: float = Field(default=0.0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_tuning(self) -> IrTuningConfig:
+        for value in (
+            self.rocof_threshold_hz_per_s,
+            self.gain_mw_second_per_hz,
+            self.max_increase_mw,
+            self.max_decrease_mw,
+            self.rocof_window_s,
+            self.recovery_s,
+        ):
+            if not math.isfinite(value):
+                raise ValueError("IR tuning parameters must be finite")
+        return self
+
+
+class FrequencyResponseConfig(ConfigModel):
+    """内部 PFR/IR 的频率测点与事件整定。"""
+
+    frequency_point: str = Field(min_length=1)
+    nominal_frequency_hz: float = Field(gt=0)
+    valid_for_s: float = Field(gt=0)
+    pfr: PfrTuningConfig | None = None
+    ir: IrTuningConfig | None = None
+
+    @model_validator(mode="after")
+    def validate_response(self) -> FrequencyResponseConfig:
+        if not math.isfinite(self.nominal_frequency_hz):
+            raise ValueError("nominal frequency must be finite")
+        if not math.isfinite(self.valid_for_s):
+            raise ValueError("frequency reference lifetime must be finite")
+        if self.pfr is None and self.ir is None:
+            raise ValueError("frequency response requires a PFR or IR tuning block")
+        return self
+
+
 class ActivePlanningConfig(ConfigModel):
     target: str = Field(min_length=1)
     mode: AgcMode = AgcMode.SETPOINT
@@ -325,6 +394,7 @@ class ActivePlanningConfig(ConfigModel):
     authorized_sources: tuple[ReferenceSource, ...] = Field(min_length=1)
     reference_inputs: tuple[PlanningReferenceConfig, ...] = ()
     active_functions: tuple[CoordinationFunction, ...] = ()
+    frequency: FrequencyResponseConfig | None = None
     maximum_skew_ns: int = Field(default=500_000_000, gt=0)
 
     @model_validator(mode="after")
@@ -365,6 +435,12 @@ class ActivePlanningConfig(ConfigModel):
             raise ValueError("duplicate planning control function")
         if set(self.active_functions) - {CoordinationFunction.PFR, CoordinationFunction.IR}:
             raise ValueError("planning active functions support PFR and IR only")
+        if self.frequency is not None:
+            functions = set(self.active_functions)
+            if self.frequency.pfr is not None and CoordinationFunction.PFR not in functions:
+                raise ValueError("PFR tuning requires PFR in active_functions")
+            if self.frequency.ir is not None and CoordinationFunction.IR not in functions:
+                raise ValueError("IR tuning requires IR in active_functions")
         return self
 
 
@@ -649,6 +725,55 @@ class OrcaConfig(ConfigModel):
                         point.point_id for point in resource.inputs.values()
                     }:
                         raise ValueError(f"task {name}: reference measurement not registered")
+                frequency = task.planning.frequency
+                if frequency is not None and frequency.frequency_point not in {
+                    point.point_id for point in poi.inputs.values()
+                }:
+                    raise ValueError(
+                        f"task {name}: frequency measurement not registered on POI"
+                    )
+                if task.planning.active_functions:
+                    controller = self.controllers[task.controller_id]
+                    policies = {
+                        (policy.purpose, policy.target): policy
+                        for policy in controller.references
+                    }
+                    internal_tuning = {
+                        CoordinationFunction.PFR: (
+                            ReferencePurpose.PFR_DELTA,
+                            frequency.pfr if frequency is not None else None,
+                        ),
+                        CoordinationFunction.IR: (
+                            ReferencePurpose.IR_DELTA,
+                            frequency.ir if frequency is not None else None,
+                        ),
+                    }
+                    for function in task.planning.active_functions:
+                        purpose, tuning = internal_tuning[function]
+                        policy = policies.get((purpose, task.planning.target))
+                        if policy is None:
+                            raise ValueError(
+                                f"task {name}: {function.value} requires a "
+                                f"{purpose.value} reference policy"
+                            )
+                        if policy.primary == ReferenceSource.INTERNAL and tuning is None:
+                            raise ValueError(
+                                f"task {name}: internal {function.value} requires "
+                                "frequency tuning"
+                            )
+                        if (
+                            policy.primary == ReferenceSource.INTERNAL
+                            and ReferenceSource.INTERNAL not in task.planning.authorized_sources
+                        ):
+                            raise ValueError(
+                                f"task {name}: internal {function.value} requires "
+                                "INTERNAL in authorized_sources"
+                            )
+                        if policy.primary != ReferenceSource.INTERNAL and tuning is not None:
+                            raise ValueError(
+                                f"task {name}: {function.value} tuning requires an "
+                                "INTERNAL primary reference policy"
+                            )
             if task.reactive_planning is not None:
                 plan = task.reactive_planning
                 if plan.poi_device_id not in self.resources:
