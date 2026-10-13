@@ -3,12 +3,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 from collections.abc import Callable
 
 from core.domain.config import OrcaConfig
 from core.domain.control_authority import ControlAuthority, ControlFunction
 from core.application.validation import validate_inputs
 from .cycle import ControlCycle
+
+if TYPE_CHECKING:
+    from core.application.read_only_planning_cycle import PlanningCyclePort
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +27,21 @@ class ControlRuntime:
         cycle: ControlCycle | None = None,
         *,
         reset_control_state: Callable[[str], None] | None = None,
+        planning_cycle: PlanningCyclePort | None = None,
+        planning_tasks: frozenset[str] = frozenset(),
     ) -> None:
         self.config = config
         self.control_authority = ControlAuthority()
         self.source = source
         self.cycle = cycle
         self._reset_control_state = reset_control_state
+        if planning_tasks and planning_cycle is None:
+            raise ValueError("planning tasks require a planning cycle")
+        if planning_tasks - set(config.tasks):
+            raise ValueError("unknown planning task")
+        self._planning_cycle = planning_cycle
+        self._planning_tasks = planning_tasks
+        self.planning_results: dict[str, object] = {}
         self.write_enabled = False  # 现场写权限未验证；生产装配不得自动放开
         self.states = {name: "STOPPED" for name in config.tasks}
         self.reasons: dict[str, str] = {}
@@ -85,12 +98,18 @@ class ControlRuntime:
         for target in targets:
             if owner := self._authority.get(target):
                 raise RuntimeError(f"output {target} is already owned by task {owner}")
-        if self._reset_control_state is not None:
-            self._reset_control_state(task_id)
+        self._reset_task_state(task_id)
         for target in targets:
             self._authority[target] = task_id
         self.states[task_id] = "RUNNING"
         self._workers[task_id] = asyncio.create_task(self._run_task(task_id))
+
+    def _reset_task_state(self, task_id: str) -> None:
+        self.planning_results.pop(task_id, None)
+        if self._planning_cycle is not None and task_id in self._planning_tasks:
+            self._planning_cycle.reset(task_id)
+        if self._reset_control_state is not None:
+            self._reset_control_state(task_id)
 
     async def stop_task(self, task_id: str) -> None:
         if task_id not in self.states:
@@ -104,8 +123,7 @@ class ControlRuntime:
                 pass
         self.states[task_id] = "STOPPED"
         self._release_authority(task_id)
-        if self._reset_control_state is not None:
-            self._reset_control_state(task_id)
+        self._reset_task_state(task_id)
 
     def _release_authority(self, task_id: str) -> None:
         for target, owner in list(self._authority.items()):
@@ -127,8 +145,7 @@ class ControlRuntime:
                 deadline = loop.time() + interval
                 if not self.ready:
                     self.reasons[task_id] = "external dependencies unavailable"
-                    if self._reset_control_state is not None:
-                        self._reset_control_state(task_id)
+                    self._reset_task_state(task_id)
                     continue
                 try:
                     pairs = [
@@ -136,15 +153,19 @@ class ControlRuntime:
                         for resource_id in self.config.tasks[task_id].resource_ids
                         for variable in self.config.resources[resource_id].inputs.values()
                     ]
-                    if self.cycle is not None:
+                    if task_id in self._planning_tasks:
+                        assert self._planning_cycle is not None
+                        result = await self._planning_cycle.execute(task_id)
+                        self.planning_results[task_id] = result
+                        self.reasons.pop(task_id, None)
+                    elif self.cycle is not None:
                         reason = await self.cycle.execute(
                             task_id,
                             can_write=lambda: self._can_write_task(task_id),
                         )
                         if reason:
                             self.reasons[task_id] = reason
-                            if self._reset_control_state is not None:
-                                self._reset_control_state(task_id)
+                            self._reset_task_state(task_id)
                         else:
                             self.reasons.pop(task_id, None)
                     else:
@@ -160,11 +181,9 @@ class ControlRuntime:
                     raise
                 except Exception as exc:
                     self.reasons[task_id] = f"cycle failed: {exc}"
-                    if self._reset_control_state is not None:
-                        self._reset_control_state(task_id)
+                    self._reset_task_state(task_id)
                     logger.warning("control task %s skipped: %s", task_id, exc)
         finally:
             self.states[task_id] = "STOPPED"
             self._release_authority(task_id)
-            if self._reset_control_state is not None:
-                self._reset_control_state(task_id)
+            self._reset_task_state(task_id)
