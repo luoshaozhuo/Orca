@@ -1,8 +1,7 @@
 """冻结设备能力快照；同一版本内 P/Q、SOC、旁路及爬坡信息一致。"""
 from __future__ import annotations
 
-from dataclasses import replace
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from core.domain.device_capability import (
     DevicePQCapability,
