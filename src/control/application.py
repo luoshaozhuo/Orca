@@ -10,6 +10,7 @@ from infrastructure.redis.source import RedisSource
 
 from core.domain.config import OrcaConfig
 from core.application.reference_manager import ReferenceManager
+from core.application.internal_reference import InternalReferenceService
 from .runtime import ControlRuntime
 from .cycle import ControlCycle
 from algorithms.noop import NoOpStrategy
@@ -29,6 +30,9 @@ class ControlApplication:
             raise ValueError("unsupported strategy: only noop is available before field commissioning")
         self.cycle = ControlCycle(config, self.redis, self.commander, NoOpStrategy())
         self.runtime = ControlRuntime(config, self.redis, self.cycle)
+        self.internal_references = InternalReferenceService(
+            self.references, self.runtime.control_authority,
+        )
         self.watchdog = WindHubWatchdog(config, self.runtime, self.redis, self.commander)
         self._server: asyncio.AbstractServer | None = None
         self._socket = Path(config.runtime.socket_path)
