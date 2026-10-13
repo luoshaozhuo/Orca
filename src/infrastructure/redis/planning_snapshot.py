@@ -27,7 +27,9 @@ from core.domain.device_capability import (
     DevicePQCapability, DeviceTechnology, StorageEnergyLimits,
 )
 from core.domain.device_ramp import DeviceRampLimits
-from core.domain.reference import ReferenceSource
+from core.domain.reference import (
+    ControlReference, ReferencePurpose, ReferenceSource,
+)
 
 
 class MeasurementSource(Protocol):
@@ -74,6 +76,15 @@ class DevicePlanningBinding:
 
 
 @dataclass(frozen=True, slots=True)
+class PlanningReferenceBinding:
+    purpose: ReferencePurpose
+    source: ReferenceSource
+    resource_id: str
+    point_id: str
+    valid_for_ns: int
+
+
+@dataclass(frozen=True, slots=True)
 class ActivePlanningBinding:
     """任务的 POI 测点及设备映射，来源授权只能由调用方提供。"""
 
@@ -85,6 +96,7 @@ class ActivePlanningBinding:
     dt_s: float
     devices: tuple[DevicePlanningBinding, ...]
     authorized_sources: frozenset[ReferenceSource]
+    reference_inputs: tuple[PlanningReferenceBinding, ...] = ()
     active_functions: frozenset[CoordinationFunction] = frozenset()
     maximum_skew_ns: int = 500_000_000
 
@@ -124,6 +136,7 @@ class RedisPlanningSnapshotSource:
         self._generation = generation
         self._maximum_age_ns = maximum_age_ns
         self._can_plan = can_plan
+        self._last_reference: dict[tuple[str, ReferencePurpose, ReferenceSource], tuple[int, float]] = {}
 
     @staticmethod
     def _value(record: dict[str, Any], key: tuple[str, str], now_ns: int, max_age: int) -> tuple[float, int]:
@@ -153,13 +166,16 @@ class RedisPlanningSnapshotSource:
             pairs.extend(((device.device_id, device.p_point), (device.device_id, device.q_point)))
             if device.storage is not None:
                 pairs.append((device.device_id, device.storage.soc_point))
+        measurement_pairs = tuple(pairs)
+        for reference in binding.reference_inputs:
+            pairs.append((reference.resource_id, reference.point_id))
         if len(set(pairs)) != len(pairs):
             raise ValueError("duplicate planning measurement mapping")
         records = await self._source.latest(pairs)
         now_ns = time.time_ns()
         measured: dict[tuple[str, str], float] = {}
         timestamps: list[int] = []
-        for pair in pairs:
+        for pair in measurement_pairs:
             record = records.get(pair)
             if record is None:
                 raise ValueError(f"{pair}: missing measurement")
@@ -170,6 +186,42 @@ class RedisPlanningSnapshotSource:
             timestamps.append(timestamp_ns)
         if max(timestamps) - min(timestamps) > binding.maximum_skew_ns:
             raise ValueError("planning measurements have excessive time skew")
+        for reference in binding.reference_inputs:
+            key = (reference.resource_id, reference.point_id)
+            raw = records.get(key)
+            if raw is None:
+                raise ValueError(f"{key}: missing planning reference")
+            number, stamp_ns = self._value(
+                raw, key, now_ns, reference.valid_for_ns,
+            )
+            sample_key = (task_id, reference.purpose, reference.source)
+            previous = self._last_reference.get(sample_key)
+            if previous is not None:
+                if stamp_ns < previous[0] or (
+                    stamp_ns == previous[0] and number != previous[1]
+                ):
+                    raise ValueError("planning reference update is out of order")
+                if stamp_ns == previous[0]:
+                    continue
+            kind = (
+                ControlValueKind.ABSOLUTE
+                if reference.purpose == ReferencePurpose.ACTIVE_BASE
+                else ControlValueKind.DELTA
+            )
+            sample = ControlReference(
+                purpose=reference.purpose,
+                source=reference.source,
+                control=ControlValue(
+                    ControlQuantity.ACTIVE_POWER, ControlScope.POI, binding.target,
+                    ControlValueRole.REFERENCE, kind, number, "MW",
+                ),
+                timestamp_ns=stamp_ns,
+                valid_until_ns=stamp_ns + reference.valid_for_ns,
+                generation=self._generation,
+                sequence_id=stamp_ns,
+            )
+            self._references.publish(sample)
+            self._last_reference[sample_key] = (stamp_ns, number)
 
         poi = ControlValue(
             ControlQuantity.ACTIVE_POWER, ControlScope.POI, binding.target,
