@@ -9,7 +9,7 @@ from control.runtime import ControlRuntime
 from core.application.validation import validate_inputs
 from infrastructure.wind_hub.watchdog import WindHubWatchdog
 
-CONFIG = Path(__file__).resolve().parents[1] / "configs" / "template"
+CONFIG = Path(__file__).resolve().parents[1] / "configs"
 
 
 class FakeRedis:
