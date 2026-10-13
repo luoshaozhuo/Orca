@@ -63,6 +63,7 @@ class WindHubConfig(ConfigModel):
 class RuntimeConfig(ConfigModel):
     shutdown_timeout: float = Field(default=10.0, gt=0)
     socket_path: str = "/tmp/orca-control.sock"
+    planning_generation: int = Field(default=0, ge=0)
 
 
 class VariableConfig(ConfigModel):
