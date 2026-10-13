@@ -16,6 +16,7 @@ from core.domain.reference import (
 from core.domain.device_capability import DeviceTechnology
 from infrastructure.redis.planning_snapshot import (
     ActivePlanningBinding, DevicePlanningBinding, RedisPlanningSnapshotSource,
+    StoragePlanningBinding,
 )
 
 
@@ -148,4 +149,62 @@ async def test_reference_generation_mismatch_blocks_snapshot() -> None:
         can_plan=lambda task, device, quantity: True,
     )
     with pytest.raises(ValueError, match="reference generation mismatch"):
+        await provider.acquire("active")
+
+
+@pytest.mark.asyncio
+async def test_storage_soc_and_ramp_constraints_are_in_snapshot() -> None:
+    from dataclasses import replace
+
+    records = values()
+    records[("wtg", "p")]["value"] = 0.0
+    records[("wtg", "soc")] = {
+        "value": 0.2,
+        "quality": "good",
+        "timestamp": records[("wtg", "p")]["timestamp"],
+    }
+    original = bindings()["active"]
+    store = replace(
+        original.devices[0],
+        technology=DeviceTechnology.STORAGE,
+        p_min=-10.0,
+        p_max=10.0,
+        p_ramp_up=1.0,
+        p_ramp_down=1.0,
+        storage=StoragePlanningBinding(
+            soc_point="soc", soc_min=0.2, soc_max=0.8,
+            energy_mwh=1.0, charge_efficiency=1.0,
+            discharge_efficiency=1.0,
+        ),
+    )
+    provider = RedisPlanningSnapshotSource(
+        MockMeasurements(records), references(),
+        {"active": replace(original, devices=(store,))},
+        generation=7, maximum_age_ns=2_000_000_000,
+        can_plan=lambda task, device, quantity: True,
+    )
+    result = await provider.acquire("active")
+    assert result.devices.bounded()[0].p_max == 0.0
+
+
+@pytest.mark.asyncio
+async def test_missing_soc_measurement_blocks_storage_snapshot() -> None:
+    from dataclasses import replace
+
+    original = bindings()["active"]
+    store = replace(
+        original.devices[0],
+        technology=DeviceTechnology.STORAGE,
+        storage=StoragePlanningBinding(
+            soc_point="soc", soc_min=0.2, soc_max=0.8,
+            energy_mwh=1.0, charge_efficiency=1.0,
+            discharge_efficiency=1.0,
+        ),
+    )
+    provider = RedisPlanningSnapshotSource(
+        MockMeasurements(values()), references(),
+        {"active": replace(original, devices=(store,))},
+        generation=7, maximum_age_ns=2_000_000_000,
+    )
+    with pytest.raises(ValueError, match="missing measurement"):
         await provider.acquire("active")
