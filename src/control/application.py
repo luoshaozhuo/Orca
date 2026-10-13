@@ -9,6 +9,10 @@ from infrastructure.wind_hub.commander import CommanderClient
 from infrastructure.redis.source import RedisSource
 
 from core.application.control_coordinator import ControlCoordinator
+from core.application.active_power_controller import ActivePowerController
+from core.application.joint_power_allocator import JointPowerAllocator
+from core.application.read_only_planning_cycle import ReadOnlyPlanningCycle
+from core.application.port.planning_snapshot import PlanningSnapshotPort
 from core.application.control_pipeline_factory import build_control_pipeline
 from core.application.internal_reference import InternalReferenceService
 from core.application.reference_manager import ReferenceManager
@@ -22,7 +26,13 @@ from infrastructure.wind_hub.watchdog import WindHubWatchdog
 class ControlApplication:
     """负责 Runtime/Watchdog/Unix socket 的生命周期。"""
 
-    def __init__(self, config: OrcaConfig) -> None:
+    def __init__(
+        self,
+        config: OrcaConfig,
+        *,
+        planning_snapshots: PlanningSnapshotPort | None = None,
+        planning_tasks: frozenset[str] = frozenset(),
+    ) -> None:
         self.config = config
         self.references = ReferenceManager.from_controllers(config.controllers)
         self.active_power_coordinator = ControlCoordinator(
@@ -42,9 +52,29 @@ class ControlApplication:
         if any(controller.enabled and controller.strategy != "noop" for controller in config.controllers.values()):
             raise ValueError("unsupported strategy: only noop is available before field commissioning")
         self.cycle = ControlCycle(config, self.redis, self.commander, NoOpStrategy())
+        if planning_tasks and planning_snapshots is None:
+            raise ValueError("planning tasks require an authorized snapshot source")
+        if planning_tasks - set(self.control_pipelines):
+            raise ValueError("planning tasks require enabled configured controllers")
+        planning_cycle = None
+        if planning_snapshots is not None and planning_tasks:
+            planning_cycle = ReadOnlyPlanningCycle(
+                planning_snapshots,
+                {
+                    task_id: ActivePowerController(
+                        pipeline=self.control_pipelines[task_id],
+                        coordinator=self.active_power_coordinator,
+                    )
+                    for task_id in planning_tasks
+                },
+                JointPowerAllocator(),
+                maximum_age_ns=int(config.wind_hub.watchdog.interval * 1e9),
+            )
         self.runtime = ControlRuntime(
             config, self.redis, self.cycle,
             reset_control_state=self._reset_control_state,
+            planning_cycle=planning_cycle,
+            planning_tasks=planning_tasks,
         )
         self.internal_references = InternalReferenceService(
             self.references, self.runtime.control_authority,
@@ -91,6 +121,16 @@ class ControlApplication:
             "tasks": self.runtime.states.copy(),
             "output_owners": {f"{device}/{point}": owner for (device, point), owner in self.runtime._authority.items()},
             "task_reasons": self.runtime.reasons.copy(),
+            "planning_tasks": sorted(self.runtime._planning_tasks),
+            "planning_results": {
+                task_id: {
+                    "generation": result.allocation.generation,
+                    "feasible": result.allocation.feasible,
+                    "active_setpoints": len(result.allocation.active),
+                    "reactive_setpoints": len(result.allocation.reactive),
+                }
+                for task_id, result in self.runtime.planning_results.items()
+            },
             "authority_mode": self.runtime.control_authority.mode.value,
             "control_functions": {
                 function.value: {
