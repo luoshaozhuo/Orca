@@ -22,6 +22,7 @@ class RedisConfig(ConfigModel):
     key_prefix: str = Field(default="windhub", min_length=1)
     username: str | None = None
     password_env: str | None = None
+    password_file: str | None = None
 
 
 class CollectorConfig(ConfigModel):

@@ -22,7 +22,7 @@ from tests.support.docker_redis import docker_redis_port
 from tests.support.redis_data import publish_measurement
 from tests.support.services import CommanderScenario, start_commander
 
-CONFIG = Path(__file__).resolve().parents[2] / "configs" / "template"
+CONFIG = Path(__file__).resolve().parents[2] / "configs"
 PAIR = ("wtg001", "active_power")
 
 
