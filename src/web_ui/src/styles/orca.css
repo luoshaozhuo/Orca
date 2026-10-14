@@ -49,3 +49,9 @@
 .overview-grid>.stack:first-child>.panel:last-child{order:3}
 .overview-grid>.stack:last-child>.panel:last-child{order:4}
 }
+
+/* Element Plus row/column dashboard: matching heights within each row. */
+.overview-rows{margin-bottom:var(--app-space-3)}
+.overview-rows .el-col{display:flex;min-width:0}
+.overview-rows .el-col>.panel{width:100%;height:100%}
+@media(max-width:991px){.overview-rows .el-col+.el-col{margin-top:var(--app-space-3)}}
