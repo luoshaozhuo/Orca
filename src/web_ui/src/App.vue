@@ -112,7 +112,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                 <div class="metric-label">{{m.label}}</div><div class="metric-value">{{m.value}} <small>{{m.unit}}</small></div><div class="metric-foot">{{m.foot}}</div>
               </div>
             </div>
-            <div class="content-grid">
+            <div class="overview-grid">
               <div class="stack">
                 <div class="panel">
                   <h2 class="panel-title">控制功能与算法</h2>
@@ -159,7 +159,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                 </div>
               </div>
             </div>
-            <div class="panel" style="margin-top:16px"><ResponseChart v-if="mock" :data="response" title="全场有功 · 调度目标与实际反馈"/><el-empty v-else description="等待并网点趋势数据"/></div>
+            <div class="panel overview-trend"><ResponseChart v-if="mock" :data="response" title="全场有功 · 调度目标与实际反馈"/><el-empty v-else description="等待并网点趋势数据"/></div>
           </template>
 
           <template v-else-if="page==='config'">
