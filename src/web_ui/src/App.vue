@@ -4,6 +4,7 @@ import ResponseChart from './components/ResponseChart.vue'
 import MetricCard from './components/MetricCard.vue'
 import StationTrend from './components/StationTrend.vue'
 import ControlPipeline from './components/ControlPipeline.vue'
+import EngineeringWorkbench from './components/EngineeringWorkbench.vue'
 import { capabilityMetrics, type CapabilityMetric } from './mock/capabilities'
 import { station, controls, units, events, tests, response, unitResponse, reasons } from './mock/data'
 type Page = 'overview' | 'control' | 'analysis' | 'config' | 'commissioning' | 'events'
@@ -31,12 +32,9 @@ const showDetails = ref(false)
 const selectedMetric = ref<CapabilityMetric | null>(null)
 const metricDrawerOpen = ref(false)
 function openMetric(metric: CapabilityMetric) { selectedMetric.value = metric; metricDrawerOpen.value = true }
-const trial = ref('agc')
-const mode = ref('simulation')
 const selectedConfig = ref('station')
 const selectedControl = ref('station')
 const selectedAnalysis = ref('realtime')
-const commissioningTab = ref('test')
 const analysisTab = ref('performance')
 const mock = ref(true)
 const selectedUnit = ref(units[0].id)
@@ -44,7 +42,6 @@ const activeUnit = computed(() => units.find(u => u.id === selectedUnit.value) ?
 const sampledUnits = computed(() => units.filter(u => u.type === '风机').slice(0,8))
 const eventQuery = ref('')
 const filteredEvents = computed(() => events.filter(e => Object.values(e).some(v => String(v).toLowerCase().includes(eventQuery.value.trim().toLowerCase()))))
-const selectedTest = ref(tests[0].id)
 const errors = computed(() => services.value.filter(s => s.state === 'unavailable'))
 const statusLabel = (s: Health) => s === 'healthy' ? '可达' : s === 'unavailable' ? '不可达' : '未检测'
 const statusType = (s: Health) => s === 'healthy' ? 'success' : s === 'unavailable' ? 'danger' : 'info'
@@ -354,41 +351,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
           </template>
 
           <template v-else-if="page==='commissioning'">
-            <el-tabs v-model="commissioningTab">
-              <el-tab-pane label="试验与整定" name="test"/>
-              <el-tab-pane label="效果与成因分析" name="performance"/>
-              <el-tab-pane label="历史回放" name="replay"/>
-              <el-tab-pane label="通信诊断" name="communication"/>
-            </el-tabs>
-            <div class="panel-card panel stack" v-if="commissioningTab==='test'">
-              <h2 class="app-panel-title panel-title">仿真试验与参数整定</h2>
-              <div class="toolbar"><span>控制功能</span>
-                <el-select v-model="trial" style="width:150px"><el-option label="AGC" value="agc"/>
-                  <el-option label="PFR（二期）" value="pfr" disabled/><el-option label="IR（二期）" value="ir" disabled/>
-                  <el-option label="AVC（二期）" value="avc" disabled/></el-select>
-                <span>试验模式</span><el-select v-model="mode" style="width:150px"><el-option label="离线仿真" value="simulation"/></el-select>
-                <el-button type="primary" disabled>运行试验</el-button><el-button disabled>保存候选参数</el-button>
-              </div>
-              <ResponseChart v-if="mock" :data="response" title="AGC 阶跃试验 · 指令 / 响应"/><div v-else class="chart-placeholder">试验引擎待接入</div>
-              <el-table v-if="mock" :data="tests" stripe><el-table-column prop="id" label="试验编号"/><el-table-column prop="date" label="时间"/><el-table-column prop="algorithm" label="算法"/><el-table-column prop="settle" label="调节时间 (s)"/><el-table-column prop="overshoot" label="超调 (%)"/><el-table-column prop="error" label="稳态误差 (MW)"/></el-table>
-              <p class="section-note">调试参数与正式运行参数分离；未确认之前不自动生效。</p>
-            </div>
-            <div class="panel-card panel" v-else-if="commissioningTab==='performance'">
-              <h2 class="app-panel-title panel-title">性能指标与成因诊断</h2>
-              <template v-if="mock"><ResponseChart :data="response" title="控制效果分析 · AGC-014"/><div class="summary-grid"><div class="panel-card panel" v-for="(m,i) in [{label:'调节时间',value:'17.2 s'},{label:'超调量',value:'2.1%'},{label:'稳态误差',value:'0.62 MW'},{label:'最大分配残差',value:'2.4 MW'}]" :key="i"><div class="metric-label">{{m.label}}</div><div class="app-metric metric-value">{{m.value}}</div></div></div><el-table :data="reasons"><el-table-column prop="name" label="候选成因"/><el-table-column prop="contribution" label="影响程度（示意）"/><el-table-column prop="evidence" label="证据示意" min-width="200"/></el-table></template><el-empty v-else description="性能与诊断接口待接入"/>
-            </div>
-            <div class="panel-card panel" v-else-if="commissioningTab==='replay'">
-              <h2 class="app-panel-title panel-title">历史指令与响应回放</h2>
-              <template v-if="mock"><el-select v-model="selectedTest" style="width:200px"><el-option v-for="t in tests" :key="t.id" :label="t.id+' · '+t.date" :value="t.id"/></el-select><ResponseChart :data="response" title="历史控制记录回放 · 示例"/></template><el-empty v-else description="历史回放接口待接入"/>
-            </div>
-            <div class="panel-card panel" v-else>
-              <h2 class="app-panel-title panel-title">Controller、Commander、消息中间件诊断</h2>
-              <div class="service-health"><div class="service-tile" v-for="s in services" :key="s.id">
-                <b>{{s.name}}</b><el-tag :type="mock?'success':statusType(s.state)">{{mock?'健康 · 演示':statusLabel(s.state)}}</el-tag>
-                <p class="secondary">{{mock?'连接正常，最近消息 56 ms 前 · 模拟':s.detail}}</p><span class="section-note">检查：{{s.checkedAt??'—'}}</span>
-              </div></div>
-              <p class="section-note">这里只检查服务及数据链路，设备协议调试仍由 Wind Hub 负责。</p>
-            </div>
+            <EngineeringWorkbench />
           </template>
 
           <template v-else-if="page==='events'">
