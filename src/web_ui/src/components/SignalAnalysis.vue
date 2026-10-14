@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import type { ECharts } from 'echarts'
+import { chartVisuals, chartAxisText, chartZoomText } from '../utils/chartTheme'
 import { response } from '../mock/data'
 import { welchPsd } from '../utils/welch'
 
@@ -53,10 +54,10 @@ function draw(){
  else if(mode.value==='correlation'){x=correlation.value.map(v=>String(v.lag));y=correlation.value.map(v=>v.value);xName='目标领先/滞后 (s)';yName='相关系数'}
  else {x=response.map(v=>v.time);y=raw.value;xName='时间';yName='功率 (MW)'}
  chart.setOption({
-  tooltip:{trigger:'axis'},grid:{left:65,right:28,top:42,bottom:65},
-  xAxis:{type:'category',name:xName,boundaryGap:false,data:x,axisLabel:{hideOverlap:true}},
-  yAxis:{type:'value',name:yName,scale:mode.value!=='correlation',min:mode.value==='correlation'?-1:undefined,max:mode.value==='correlation'?1:undefined},
-  dataZoom:[{type:'inside'},{type:'slider',height:14,bottom:12}],
+  ...chartVisuals(),grid:{left:65,right:28,top:42,bottom:65},
+  xAxis:{type:'category',name:xName,boundaryGap:false,data:x,...chartAxisText()},
+  yAxis:{type:'value',name:yName,scale:mode.value!=='correlation',min:mode.value==='correlation'?-1:undefined,max:mode.value==='correlation'?1:undefined,...chartAxisText()},
+  dataZoom:[{type:'inside'},{type:'slider',height:14,bottom:12,...chartZoomText()}],
   series:[{type:'line',name:seriesMap[channel.value],showSymbol:false,data:y.map(v=>Number(v.toFixed(5)))}]
  },true)
 }
