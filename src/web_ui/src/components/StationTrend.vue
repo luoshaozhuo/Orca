@@ -34,7 +34,7 @@ function draw() {
   chart.setOption({
     tooltip: { trigger: 'axis' },
     legend: { show: false },
-    grid: { top: 28, left: 60, right: 70, bottom: 45 },
+    grid: { top: 28, left: 110, right: 125, bottom: 45 },
     xAxis: { type: 'category', data: response.map(point => point.time), boundaryGap: false },
     yAxis: data.map((channel, index) => ({
       type: 'value', name: channel.unit, scale: true,
