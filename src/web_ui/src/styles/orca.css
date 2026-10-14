@@ -29,3 +29,23 @@
 .log-line{padding:var(--app-space-3) 0;border-bottom:1px solid var(--app-border-soft);font-family:monospace;font-size:var(--app-font-body)}
 @media(max-width:1199px){.overview-grid,.content-grid{grid-template-columns:1fr}.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:767px){.summary-grid,.service-health{grid-template-columns:1fr}.page-head{align-items:flex-start}.header-subtitle{display:none}}
+
+/* Align paired dashboard panels on shared row tracks; do not equalize column stacks independently. */
+.app-header>.header-right{margin-left:auto;justify-content:flex-end;flex:0 0 auto}
+.overview-grid{grid-template-rows:auto auto;align-items:stretch}
+.overview-grid>.stack{display:contents}
+.overview-grid>.stack:first-child>.panel:first-child{grid-column:1;grid-row:1}
+.overview-grid>.stack:first-child>.panel:last-child{grid-column:1;grid-row:2}
+.overview-grid>.stack:last-child>.panel:first-child{grid-column:2;grid-row:1}
+.overview-grid>.stack:last-child>.panel:last-child{grid-column:2;grid-row:2}
+@media(max-width:1199px){
+.overview-grid{grid-template-columns:1fr;grid-template-rows:auto}
+.overview-grid>.stack:first-child>.panel:first-child,
+.overview-grid>.stack:first-child>.panel:last-child,
+.overview-grid>.stack:last-child>.panel:first-child,
+.overview-grid>.stack:last-child>.panel:last-child{grid-column:auto;grid-row:auto}
+.overview-grid>.stack:first-child>.panel:first-child{order:1}
+.overview-grid>.stack:last-child>.panel:first-child{order:2}
+.overview-grid>.stack:first-child>.panel:last-child{order:3}
+.overview-grid>.stack:last-child>.panel:last-child{order:4}
+}
