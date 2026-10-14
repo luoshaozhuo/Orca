@@ -27,7 +27,8 @@ const spectrum=computed(()=>{
  return Array.from({length:Math.floor(n/2)+1},(_,k)=>{
   let re=0,im=0
   for(let i=0;i<n;i++){const phase=2*Math.PI*k*i/n;re+=input[i]*Math.cos(phase);im-=input[i]*Math.sin(phase)}
-  const amplitude=Math.hypot(re,im)/(n*coherentGain)*(k===0?1:2)
+  const nyquist=n%2===0&&k===n/2
+  const amplitude=Math.hypot(re,im)/(n*coherentGain)*(k===0||nyquist?1:2)
   return {frequency:k/(n*samplePeriod),amplitude}
  })
 })
