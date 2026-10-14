@@ -19,8 +19,8 @@ const sampledUnits = computed(() => units.filter(unit => unit.type === '风机')
               <el-tab-pane label="全场控制" name="station"/>
               <el-tab-pane label="机组控制" name="units"/>
             </el-tabs>
-            <div class="content-grid">
-              <div class="stack">
+            <el-row :gutter="12" class="control-row">
+              <el-col :xs="24" :lg="14"><div class="stack">
                 <div class="panel-card panel">
                   <h2 class="app-panel-title panel-title">{{selectedControl==='station'?'全场控制工作台':'机组控制工作台'}}</h2>
                   <el-select v-if="selectedControl==='units'" v-model="selectedUnit" filterable style="width:220px"><el-option v-for="u in units" :key="u.id" :label="u.id+' · '+u.type" :value="u.id"/></el-select>
@@ -38,8 +38,8 @@ const sampledUnits = computed(() => units.filter(unit => unit.type === '风机')
                     <el-table-column :prop="selectedControl==='station'?'target':'target'" label="目标"/><el-table-column :prop="selectedControl==='station'?'actual':'active'" label="反馈"/><el-table-column :prop="selectedControl==='station'?'limit':'status'" label="约束状态"/>
                   </el-table>
                 </div>
-              </div>
-              <div class="stack">
+              </div></el-col>
+              <el-col :xs="24" :lg="10"><div class="stack">
                 <div class="panel-card panel">
                   <div class="page-head"><h2 class="app-panel-title panel-title">指令与响应趋势</h2>
                     <el-tag type="info" effect="plain">示意响应 · 历史数据未接入</el-tag>
@@ -55,8 +55,8 @@ const sampledUnits = computed(() => units.filter(unit => unit.type === '风机')
                   <div class="status-row"><span>指令 ID / 审计</span><b>{{mock?'CMD-20261014-1032':'—'}}</b></div>
                   <el-button @click="emit('navigate','events')">查看控制审计</el-button>
                 </div>
-              </div>
-            </div>
+              </div></el-col>
+            </el-row>
 
  </div>
 </template>
