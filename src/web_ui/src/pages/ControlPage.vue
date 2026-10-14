@@ -7,7 +7,6 @@ import { station, controls, units, response, unitResponse } from '../mock/data'
 defineProps<{ mock: boolean }>()
 const emit = defineEmits<{ navigate: [page: 'commissioning' | 'events'] }>()
 const selectedControl = ref('station')
-const selectedAnalysis = ref('realtime')
 const selectedUnit = ref(units[0].id)
 const activeUnit = computed(() => units.find(unit => unit.id === selectedUnit.value) ?? units[0])
 const sampledUnits = computed(() => units.filter(unit => unit.type === '风机').slice(0, 8))
@@ -43,7 +42,7 @@ const sampledUnits = computed(() => units.filter(unit => unit.type === '风机')
               <div class="stack">
                 <div class="panel-card panel">
                   <div class="page-head"><h2 class="app-panel-title panel-title">指令与响应趋势</h2>
-                    <el-select v-model="selectedAnalysis" style="width:140px"><el-option label="实时趋势" value="realtime"/><el-option label="历史回放" value="history"/></el-select>
+                    <el-tag type="info" effect="plain">示意响应 · 历史数据未接入</el-tag>
                   </div>
                   <ResponseChart v-if="mock" :data="selectedControl==='station'?response:unitResponse" :title="selectedControl==='station'?'全场指令与实测响应':'机组指令与实测响应'"/><div v-else class="chart-placeholder">趋势接口待接入</div>
                   <p class="section-note">同一时轴展示指令时间、反馈数据时间及质量状态。可跳转调试页查看性能指标。</p>
