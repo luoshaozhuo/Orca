@@ -5,6 +5,7 @@ import MetricCard from './components/MetricCard.vue'
 import StationTrend from './components/StationTrend.vue'
 import ControlPipeline from './components/ControlPipeline.vue'
 import EngineeringWorkbench from './components/EngineeringWorkbench.vue'
+import SignalAnalysis from './components/SignalAnalysis.vue'
 import { capabilityMetrics, type CapabilityMetric } from './mock/capabilities'
 import { station, controls, units, events, tests, response, unitResponse, reasons } from './mock/data'
 type Page = 'overview' | 'control' | 'analysis' | 'config' | 'commissioning' | 'events'
@@ -325,12 +326,8 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                 <el-table-column prop="name" label="指标" /><el-table-column prop="basis" label="评价依据" /><el-table-column prop="status" label="结果" />
               </el-table>
             </div>
-            <div v-else-if="analysisTab==='signal'" class="panel-card panel">
-              <h2 class="app-panel-title panel-title">信号与频域分析</h2>
-              <el-alert title="计划支持 FFT / Welch PSD / 互相关 / 相干函数 / FRF；需统一采样时间和质量码。" type="info" :closable="false" />
-              <ResponseChart v-if="mock" :data="response" title="时域窗口 · 示意" />
-              <el-empty v-else description="等待历史数据集" />
-            </div>
+            <SignalAnalysis v-else-if="analysisTab==='signal' && mock" />
+            <div v-else-if="analysisTab==='signal'" class="panel-card panel"><el-empty description="等待同步历史信号与采样率数据" /></div>
             <div v-else-if="analysisTab==='identification'" class="panel-card panel">
               <h2 class="app-panel-title panel-title">系统辨识</h2>
               <el-descriptions :column="1" border>
