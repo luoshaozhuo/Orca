@@ -36,14 +36,17 @@ const sampledUnits = computed(() => units.filter(u => u.type === '风机').slice
 const eventQuery = ref('')
 const filteredEvents = computed(() => events.filter(e => Object.values(e).some(v => String(v).toLowerCase().includes(eventQuery.value.trim().toLowerCase()))))
 const selectedTest = ref(tests[0].id)
-const errors = computed(() => mock.value ? [] : services.value.filter(s => s.state === 'unavailable'))
+const errors = computed(() => services.value.filter(s => s.state === 'unavailable'))
 const statusLabel = (s: Health) => s === 'healthy' ? '可达' : s === 'unavailable' ? '不可达' : '未检测'
 const statusType = (s: Health) => s === 'healthy' ? 'success' : s === 'unavailable' ? 'danger' : 'info'
 function navigate(key:string){page.value=key as Page;drawer.value=false}
 let timer: ReturnType<typeof setInterval> | undefined
+let checking = false
 async function checkServices(){
-  if(mock.value) return
-  await Promise.all(services.value.map(async service => {
+  if(checking) return
+  checking = true
+  try {
+    await Promise.all(services.value.map(async service => {
     if(!service.url){service.state='unknown';service.detail='未配置检查端点';return}
     const controller = new AbortController()
     const timeout = setTimeout(()=>controller.abort(),3000)
@@ -55,10 +58,13 @@ async function checkServices(){
       service.state='unavailable'
       service.detail=e instanceof Error?e.message:'请求失败'
     }finally{clearTimeout(timeout);service.checkedAt=new Date().toLocaleTimeString()}
-  }))
+    }))
+  } finally {
+    checking = false
+  }
 }
 function resize(){mobile.value=window.innerWidth<768}
-onMounted(()=>{resize();window.addEventListener('resize',resize);void checkServices();timer=setInterval(()=>void checkServices(),15000)})
+onMounted(()=>{resize();window.addEventListener('resize',resize);void checkServices();timer=setInterval(()=>void checkServices(),1000)})
 onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInterval(timer)})
 </script>
 
@@ -77,9 +83,11 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
           <span class="header-title">Orca <span class="header-subtitle">Control Console</span></span>
         </div>
         <div class="header-right">
-          <el-tag :type="mock ? 'warning' : 'info'" effect="plain">{{mock ? '演示模式 · MOCK DATA' : '接口模式'}}</el-tag>
-          <el-switch v-model="mock" active-text="演示" inactive-text="接口" @change="checkServices"/>
-          <el-tag :type="errors.length?'danger':'info'" effect="plain">{{ errors.length? `${errors.length} 项通信异常`:'服务按需连接' }}</el-tag>
+          <div class="version-summary" aria-label="版本信息">
+            <span class="version-item"><span class="version-label">Web</span><b>v0.1.0</b></span>
+            <span class="version-separator">|</span>
+            <span class="version-item"><span class="version-label">Controller</span><b>—</b></span>
+          </div>
         </div>
       </el-header>
       <el-drawer v-model="drawer" title="Orca" direction="ltr" size="260px">
@@ -98,7 +106,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
         <div class="content">
           <div class="head page-head">
             <div><h1 class="app-page-title">{{ names[page] }}</h1><p>{{mock?'所有指标、记录与响应曲线均为用于空间与交互评审的模拟数据，不代表实际运行。':'实时接口模式：未连接的数据保持未知，不伪造运行值。'}}</p></div>
-            <div class="toolbar"><el-button @click="checkServices">刷新服务状态</el-button></div>
+
           </div>
 
           <template v-if="page==='overview'">
@@ -148,7 +156,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                     <span>{{s.name}}</span><el-tag :type="statusType(s.state)">{{statusLabel(s.state)}}</el-tag>
                   </div>
                   <p class="section-note">服务可达性不代表业务健康。数据时效、订阅质量及写入能力需后台独立上报。</p>
-                  <el-button @click="checkServices">重新检查</el-button>
+
                 </div>
                 <div class="panel-card panel">
                   <h2 class="app-panel-title panel-title">运行概览</h2>
