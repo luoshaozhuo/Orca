@@ -41,3 +41,19 @@ body{background:var(--app-bg-page);color:var(--app-text-primary);font-family:Int
 .empty-help{color:var(--app-text-secondary);padding:24px;text-align:center}
 @media(max-width:1199px){.summary-grid{grid-template-columns:repeat(2,1fr)}.content-grid{grid-template-columns:1fr}.content{padding:18px}}
 @media(max-width:767px){.summary-grid,.service-health{grid-template-columns:1fr}.content{padding:12px}.app-header{padding:0 12px}.header-subtitle{display:none}.error-bar{padding:10px 12px}.page-head{flex-direction:column}}
+
+/* Operational dashboard: vertically balanced column tracks, with one spacing scale. */
+.content{padding:var(--app-space-4)}
+.page-head{margin-bottom:var(--app-space-4)}
+.summary-grid{gap:var(--app-space-3);margin-bottom:var(--app-space-3)}
+.overview-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(360px,1fr);gap:var(--app-space-3);align-items:stretch}
+.overview-grid>.stack{min-width:0;height:100%;gap:var(--app-space-3)}
+.overview-grid>.stack>.panel:last-child{flex:1}
+.overview-grid .panel-title{margin-bottom:var(--app-space-3)}
+.overview-grid .status-row{padding:9px 0}
+.overview-grid .section-note{line-height:1.35;margin:10px 0}
+.overview-trend{margin-top:var(--app-space-3)}
+@media(max-width:1199px){
+  .overview-grid{grid-template-columns:1fr}
+  .overview-grid>.stack{height:auto}
+}
