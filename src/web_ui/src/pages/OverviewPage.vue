@@ -1,0 +1,118 @@
+<script setup lang="ts">
+import { ref } from 'vue'
+import MetricCard from '../components/MetricCard.vue'
+import StationTrend from '../components/StationTrend.vue'
+import { capabilityMetrics, type CapabilityMetric } from '../mock/capabilities'
+import { station, controls } from '../mock/data'
+
+type Health = 'healthy' | 'unavailable' | 'unknown'
+type Service = { id: string; name: string; url: string; state: Health; detail: string; checkedAt?: string }
+defineProps<{ mock: boolean; services: Service[] }>()
+const selectedMetric = ref<CapabilityMetric | null>(null)
+const metricDrawerOpen = ref(false)
+const openMetric = (metric: CapabilityMetric) => { selectedMetric.value = metric; metricDrawerOpen.value = true }
+const statusLabel = (state: Health) => state === 'healthy' ? '可达' : state === 'unavailable' ? '不可达' : '未检测'
+const statusType = (state: Health) => state === 'healthy' ? 'success' : state === 'unavailable' ? 'danger' : 'info'
+</script>
+<template>
+ <div>
+
+            <div class="summary-grid">
+              <MetricCard v-for="m in [
+                {label:'并网点有功',value:mock?station.active.toFixed(1):'—',unit:'MW',summary:mock?'负荷率 62.2% · 模拟':'实际测量待接入',definition:'并网点有功功率，采用带质量标记的最新有效测量，单位 MW。'},
+                {label:'并网点无功',value:mock?station.reactive.toFixed(1):'—',unit:'Mvar',summary:mock?'全场并网点实测 · 模拟':'实际测量待接入',definition:'并网点无功功率，按场站统一的无功正负方向约定显示。'},
+                {label:'并网点电压',value:mock?station.voltage.toFixed(2):'—',unit:'kV',summary:mock?'35 kV 母线 · 模拟':'实际测量待接入',definition:'并网点电压有效测量值；计量位置及线电压/相电压口径由配置确定。'},
+                {label:'系统频率',value:mock?station.frequency.toFixed(2):'—',unit:'Hz',summary:mock?'额定 50 Hz · 模拟':'实际测量待接入',definition:'控制所采用的频率测量，须带原始时标、有效性和数据质量状态。'}
+              ]" :key="m.label" v-bind="m" />
+            </div>
+            <div class="panel-card panel overview-mode">
+              <div><span class="metric-label">当前控制模式</span><strong>{{ mock ? '远方自动 · AGC + PFR' : '未知 · 控制状态待接入' }}</strong></div>
+              <div><span class="metric-label">控制权</span><strong>{{ mock ? station.controlAuthority : '未知' }}</strong></div>
+              <div><span class="metric-label">执行策略</span><strong>{{ mock ? station.strategy : '未知' }}</strong></div>
+            </div>
+            <h2 class="app-panel-title panel-title">全场可控能力</h2>
+            <div class="summary-grid capability-grid">
+              <MetricCard v-for="metric in capabilityMetrics" :key="metric.id"
+                :label="metric.label" :value="mock ? metric.value : '—'" :unit="metric.unit"
+                :summary="mock ? metric.summary : '设备与能力快照待接入'"
+                :definition="metric.definition" :clickable="mock" :warning="mock && metric.details.length > 0"
+                @open="openMetric(metric)" />
+            </div>
+            <el-row :gutter="12" class="overview-rows">
+              <el-col :xs="24" :lg="14">
+                <div class="panel-card panel">
+                  <h2 class="app-panel-title panel-title">控制功能与算法</h2>
+                  <el-table :data="mock?controls:['AGC','AVC','PFR','IR'].map(name=>({name,enabled:'—',response:'—',algorithm:'—',uptime:'—'}))" stripe>
+                    <el-table-column prop="name" label="功能" width="90"/>
+                    <el-table-column prop="enabled" label="投入状态"/>
+                    <el-table-column prop="response" label="响应状态"/>
+                    <el-table-column prop="algorithm" label="当前算法"/>
+                    <el-table-column prop="uptime" label="运行时长"/>
+                  </el-table>
+                  <p class="section-note">功能投入与功能响应分开显示；待接入 Controller 运行状态。</p>
+                </div>
+              </el-col>
+              <el-col :xs="24" :lg="10">
+                <div class="panel-card panel">
+                  <h2 class="app-panel-title panel-title">上位机及 Wind Hub 通信</h2>
+                  <div v-if="mock" class="status-row"><span>上位机 / 调度指令源</span><el-tag type="success">正常 · 演示</el-tag></div>
+                  <div v-if="mock" class="status-row"><span>Commander gRPC</span><el-tag type="success">正常 · 演示</el-tag></div>
+                  <div v-if="mock" class="status-row"><span>消息中间件订阅</span><el-tag type="success">正常 · 演示</el-tag></div>
+                  <div v-if="!mock" class="status-row"><span>上位机 / 调度指令源</span><el-tag type="info">待接入</el-tag></div>
+                  <div v-if="!mock" v-for="s in services" :key="s.id" class="status-row">
+                    <span>{{s.name}}</span><el-tag :type="statusType(s.state)">{{statusLabel(s.state)}}</el-tag>
+                  </div>
+                  <p class="section-note">服务可达性不代表业务健康。数据时效、订阅质量及写入能力需后台独立上报。</p>
+
+                </div>
+              </el-col>
+            </el-row>
+            <el-row :gutter="12" class="overview-rows">
+              <el-col :xs="24" :lg="14">
+                <div class="panel-card panel">
+                  <h2 class="app-panel-title panel-title">实时性能与总体配置</h2>
+                  <el-descriptions :column="2" border>
+                    <el-descriptions-item label="控制周期设定">{{mock?station.period:'—'}} ms</el-descriptions-item>
+                    <el-descriptions-item label="控制周期偏差">{{mock?station.periodDeviation:'—'}} ms</el-descriptions-item>
+                    <el-descriptions-item label="协调策略">{{mock?station.strategy:'—'}}</el-descriptions-item>
+                    <el-descriptions-item label="配置版本">{{mock?station.version:'—'}}</el-descriptions-item>
+                    <el-descriptions-item label="控制权限">{{mock?station.controlAuthority:'未知'}}</el-descriptions-item>
+                    <el-descriptions-item label="最后有效测量">{{mock?station.lastSample:'—'}}</el-descriptions-item>
+                  </el-descriptions>
+                </div>
+              </el-col>
+              <el-col :xs="24" :lg="10">
+                <div class="panel-card panel">
+                  <h2 class="app-panel-title panel-title">运行概览</h2>
+                  <div class="status-row"><span>全场额定容量</span><b>{{mock?station.rated:'—'}} MW</b></div>
+                  <div class="status-row"><span>可用调节容量</span><b>{{mock?station.available:'—'}} MW</b></div>
+                  <div class="status-row"><span>控制执行异常</span><b>{{mock?'1 项待确认':'—'}}</b></div>
+                  <div class="status-row"><span>最近控制事件</span><b>{{mock?'14:41:12 AGC 调节':'—'}}</b></div>
+                </div>
+              </el-col>
+            </el-row>
+            <el-drawer v-model="metricDrawerOpen" direction="rtl" size="min(680px, 100%)"
+                       :title="selectedMetric?.label + ' · 详细原因'">
+              <template v-if="selectedMetric">
+                <el-descriptions :column="1" border>
+                  <el-descriptions-item label="当前指标">{{ selectedMetric.value }} {{ selectedMetric.unit }}</el-descriptions-item>
+                  <el-descriptions-item label="异常摘要">{{ selectedMetric.summary }}</el-descriptions-item>
+                  <el-descriptions-item label="数据说明">模拟数据 · 实际值待接入 Controller</el-descriptions-item>
+                </el-descriptions>
+                <h3 class="app-section-title metric-drawer-section">受影响设备</h3>
+                <el-table :data="selectedMetric.details" max-height="440" stripe>
+                  <el-table-column prop="id" label="设备编号" min-width="110" sortable />
+                  <el-table-column prop="type" label="设备类型" min-width="95" />
+                  <el-table-column prop="reason" label="原因" min-width="125" />
+                  <el-table-column prop="capacity" label="受限容量" min-width="95">
+                    <template #default="{row}">{{ row.capacity != null ? row.capacity + '（示意）' : '—' }}</template>
+                  </el-table-column>
+                  <el-table-column prop="since" label="发生时间" min-width="90" />
+                </el-table>
+                <p class="section-note">同一设备可能存在多个原因；正式接口需提供主原因、附加原因和快照时间，避免重复统计。</p>
+              </template>
+            </el-drawer>
+            <div class="panel-card panel overview-trend"><StationTrend v-if="mock"/><el-empty v-else description="等待全场 P/Q、风速及风电有功趋势数据"/></div>
+
+ </div>
+</template>
