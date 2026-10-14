@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import * as echarts from 'echarts'
-import { onMounted, onUnmounted, watch } from 'vue'
-import type { ECharts } from 'echarts'
+import type { EChartsOption } from 'echarts'
+import BaseChart from './BaseChart.vue'
 import { chartVisuals, chartAxisText, chartLegendText } from '../utils/chartTheme'
 
 type Experiment = { id:string; law:string; kp:number; ki:number; delay:number; settle:number; error:number; overshoot:number }
@@ -21,9 +20,6 @@ const breakpoint=ref('control')
 const cursor=ref(0)
 const snapshot=ref<Experiment[]>([])
 const scan=ref<Experiment[]>([])
-const chartEl=ref<HTMLDivElement|null>(null)
-let chart:ECharts|undefined
-let ro:ResizeObserver|undefined
 
 const stages=[
  {id:'source',name:'参考有效性'}, {id:'preprocess',name:'信号预处理'},
@@ -57,10 +53,9 @@ function scanParameters(){
  if(startKp.value<=0||endKp.value<startKp.value||steps.value<2||steps.value>30)return
  scan.value=Array.from({length:steps.value},(_,i)=>simulate(startKp.value+(endKp.value-startKp.value)*i/(steps.value-1),ki.value,selectedLaw.value))
 }
-function draw(){
- if(!chart)return
+const chartOption=computed<EChartsOption>(()=>{
  const rows=scan.value.length?scan.value:comparison.value
- chart.setOption({
+ return {
   ...chartVisuals(),legend:{top:0,...chartLegendText()},grid:{top:48,bottom:38,left:65,right:65},
   xAxis:{type:'category',name:'方案 / Kp',data:rows.map(r=>r.kp.toFixed(2)),...chartAxisText()},
   yAxis:[{type:'value',name:'调节时间 s',scale:true,...chartAxisText()},{type:'value',name:'超调 %',scale:true,...chartAxisText()}],
@@ -68,11 +63,8 @@ function draw(){
    {name:'调节时间',type:'line',data:rows.map(r=>r.settle)},
    {name:'超调量',type:'line',yAxisIndex:1,data:rows.map(r=>r.overshoot)}
   ]
- },true)
-}
-onMounted(()=>{if(!chartEl.value)return;chart=echarts.init(chartEl.value);draw();ro=new ResizeObserver(()=>chart?.resize());ro.observe(chartEl.value)})
-watch([scan,comparison],draw,{deep:true})
-onUnmounted(()=>{ro?.disconnect();chart?.dispose()})
+ }
+})
 </script>
 
 <template>
@@ -120,7 +112,7 @@ onUnmounted(()=>{ro?.disconnect();chart?.dispose()})
           <el-form-item label="扫描点数"><el-input-number v-model="steps" :min="2" :max="30" :step="1"/></el-form-item>
         </el-form>
         <el-button :disabled="endKp<startKp" @click="scanParameters">执行示意参数扫描</el-button>
-        <div ref="chartEl" class="engineering-chart" role="img" aria-label="候选参数扫描的调节时间和超调量趋势"/>
+        <BaseChart :option="chartOption" height="290px" aria-label="候选参数扫描的调节时间和超调量趋势" />
       </div></el-col>
     </el-row>
     <div class="panel-card panel">
