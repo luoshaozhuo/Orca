@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import * as echarts from 'echarts'
-import type { ECharts } from 'echarts'
+import { computed, ref } from 'vue'
+import BaseChart from './BaseChart.vue'
+import type { EChartsOption } from 'echarts'
 import { chartVisuals, chartAxisText, chartZoomText } from '../utils/chartTheme'
 import { response } from '../mock/data'
 import { welchPsd } from '../utils/welch'
@@ -43,27 +43,20 @@ const correlation=computed(()=>{
   return {lag:lag*samplePeriod,value:dx>0&&dy>0?numerator/Math.sqrt(dx*dy):0}
  })
 })
-const chartElement=ref<HTMLDivElement|null>(null)
-let chart:ECharts|undefined
-let observer:ResizeObserver|undefined
-function draw(){
- if(!chart)return
+const chartOption=computed<EChartsOption>(()=>{
  let x:string[],y:number[],xName:string,yName:string
  if(mode.value==='spectrum'){x=spectrum.value.map(v=>v.frequency.toFixed(4));y=spectrum.value.map(v=>v.amplitude);xName='频率 (Hz)';yName='幅值 (MW)'}
  else if(mode.value==='welch'){x=welch.value.bins.map(v=>v.frequency.toFixed(4));y=welch.value.bins.map(v=>v.power);xName='频率 (Hz)';yName='PSD (MW²/Hz)'}
  else if(mode.value==='correlation'){x=correlation.value.map(v=>String(v.lag));y=correlation.value.map(v=>v.value);xName='目标领先/滞后 (s)';yName='相关系数'}
  else {x=response.map(v=>v.time);y=raw.value;xName='时间';yName='功率 (MW)'}
- chart.setOption({
+ return {
   ...chartVisuals(),grid:{left:65,right:28,top:42,bottom:65},
   xAxis:{type:'category',name:xName,boundaryGap:false,data:x,...chartAxisText()},
   yAxis:{type:'value',name:yName,scale:mode.value!=='correlation',min:mode.value==='correlation'?-1:undefined,max:mode.value==='correlation'?1:undefined,...chartAxisText()},
   dataZoom:[{type:'inside'},{type:'slider',height:14,bottom:12,...chartZoomText()}],
   series:[{type:'line',name:seriesMap[channel.value],showSymbol:false,data:y.map(v=>Number(v.toFixed(5)))}]
- },true)
-}
-onMounted(()=>{if(!chartElement.value)return;chart=echarts.init(chartElement.value);draw();observer=new ResizeObserver(()=>chart?.resize());observer.observe(chartElement.value)})
-watch([raw,mode,windowType,removeMean,segmentSize,overlapFraction],draw)
-onUnmounted(()=>{observer?.disconnect();chart?.dispose()})
+ }
+})
 </script>
 <template>
  <div class="panel-card panel">
@@ -83,7 +76,7 @@ onUnmounted(()=>{observer?.disconnect();chart?.dispose()})
    <el-descriptions-item label="RMS">{{stats.rms.toFixed(2)}} MW</el-descriptions-item>
    <el-descriptions-item label="峰峰值">{{(stats.max-stats.min).toFixed(2)}} MW</el-descriptions-item>
   </el-descriptions>
-  <div ref="chartElement" class="signal-plot" role="img" aria-label="时域或频域分析图"/>
+  <BaseChart :option="chartOption" height="380px" aria-label="时域或频域分析图" />
   <p class="section-note">频率分辨率 {{(mode==='welch'?welch.resolutionHz:1/(stats.n*samplePeriod)).toFixed(5)}} Hz <span v-if="mode==='welch'">· Welch 分段 {{welch.segments}} 组</span> · Nyquist 频率 {{(1/(2*samplePeriod)).toFixed(3)}} Hz。真实数据接入时必须校验均匀采样、时钟对齐、缺测与质量标记。</p>
  </div>
 </template>
