@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import ResponseChart from './components/ResponseChart.vue'
+import MetricCard from './components/MetricCard.vue'
+import { capabilityMetrics, type CapabilityMetric } from './mock/capabilities'
 import { station, controls, units, events, tests, response, unitResponse, reasons } from './mock/data'
 type Page = 'overview' | 'control' | 'config' | 'commissioning' | 'events'
 type Health = 'healthy' | 'unavailable' | 'unknown'
@@ -23,6 +25,9 @@ const menu = [
 const mobile = ref(false)
 const drawer = ref(false)
 const showDetails = ref(false)
+const selectedMetric = ref<CapabilityMetric | null>(null)
+const metricDrawerOpen = ref(false)
+function openMetric(metric: CapabilityMetric) { selectedMetric.value = metric; metricDrawerOpen.value = true }
 const trial = ref('agc')
 const mode = ref('simulation')
 const selectedConfig = ref('station')
@@ -111,14 +116,25 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
 
           <template v-if="page==='overview'">
             <div class="summary-grid">
-              <div class="panel-card panel" v-for="m in [
-                {label:'并网点有功',value:mock?station.active.toFixed(1):'—',unit:'MW',foot:mock?'负荷率 62.2% · 演示':'实际测量待接入'},
-                {label:'并网点无功',value:mock?station.reactive.toFixed(1):'—',unit:'Mvar',foot:mock?'全场 SVG + 逆变器 · 演示':'实际测量待接入'},
-                {label:'并网点电压',value:mock?station.voltage.toFixed(2):'—',unit:'kV',foot:mock?'35 kV 母线 · 演示':'实际测量待接入'},
-                {label:'系统频率',value:mock?station.frequency.toFixed(2):'—',unit:'Hz',foot:mock?'额定 50 Hz · 演示':'实际测量待接入'}
-              ]" :key="m.label">
-                <div class="metric-label">{{m.label}}</div><div class="app-metric metric-value">{{m.value}} <small>{{m.unit}}</small></div><div class="metric-foot">{{m.foot}}</div>
-              </div>
+              <MetricCard v-for="m in [
+                {label:'并网点有功',value:mock?station.active.toFixed(1):'—',unit:'MW',summary:mock?'负荷率 62.2% · 模拟':'实际测量待接入',definition:'并网点有功功率，采用带质量标记的最新有效测量，单位 MW。'},
+                {label:'并网点无功',value:mock?station.reactive.toFixed(1):'—',unit:'Mvar',summary:mock?'全场并网点实测 · 模拟':'实际测量待接入',definition:'并网点无功功率，按场站统一的无功正负方向约定显示。'},
+                {label:'并网点电压',value:mock?station.voltage.toFixed(2):'—',unit:'kV',summary:mock?'35 kV 母线 · 模拟':'实际测量待接入',definition:'并网点电压有效测量值；计量位置及线电压/相电压口径由配置确定。'},
+                {label:'系统频率',value:mock?station.frequency.toFixed(2):'—',unit:'Hz',summary:mock?'额定 50 Hz · 模拟':'实际测量待接入',definition:'控制所采用的频率测量，须带原始时标、有效性和数据质量状态。'}
+              ]" :key="m.label" v-bind="m" />
+            </div>
+            <div class="panel-card panel overview-mode">
+              <div><span class="metric-label">当前控制模式</span><strong>{{ mock ? '远方自动 · AGC + PFR' : '未知 · 控制状态待接入' }}</strong></div>
+              <div><span class="metric-label">控制权</span><strong>{{ mock ? station.controlAuthority : '未知' }}</strong></div>
+              <div><span class="metric-label">执行策略</span><strong>{{ mock ? station.strategy : '未知' }}</strong></div>
+            </div>
+            <h2 class="app-panel-title panel-title">全场可控能力</h2>
+            <div class="summary-grid capability-grid">
+              <MetricCard v-for="metric in capabilityMetrics" :key="metric.id"
+                :label="metric.label" :value="mock ? metric.value : '—'" :unit="metric.unit"
+                :summary="mock ? metric.summary : '设备与能力快照待接入'"
+                :definition="metric.definition" :clickable="mock" :warning="mock && metric.details.length > 0"
+                @open="openMetric(metric)" />
             </div>
             <el-row :gutter="12" class="overview-rows">
               <el-col :xs="24" :lg="14">
@@ -173,6 +189,27 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                 </div>
               </el-col>
             </el-row>
+            <el-drawer v-model="metricDrawerOpen" direction="rtl" size="min(680px, 100%)"
+                       :title="selectedMetric?.label + ' · 详细原因'">
+              <template v-if="selectedMetric">
+                <el-descriptions :column="1" border>
+                  <el-descriptions-item label="当前指标">{{ selectedMetric.value }} {{ selectedMetric.unit }}</el-descriptions-item>
+                  <el-descriptions-item label="异常摘要">{{ selectedMetric.summary }}</el-descriptions-item>
+                  <el-descriptions-item label="数据说明">模拟数据 · 实际值待接入 Controller</el-descriptions-item>
+                </el-descriptions>
+                <h3 class="app-section-title metric-drawer-section">受影响设备</h3>
+                <el-table :data="selectedMetric.details" max-height="440" stripe>
+                  <el-table-column prop="id" label="设备编号" min-width="110" sortable />
+                  <el-table-column prop="type" label="设备类型" min-width="95" />
+                  <el-table-column prop="reason" label="原因" min-width="125" />
+                  <el-table-column prop="capacity" label="受限容量" min-width="95">
+                    <template #default="{row}">{{ row.capacity != null ? row.capacity + '（示意）' : '—' }}</template>
+                  </el-table-column>
+                  <el-table-column prop="since" label="发生时间" min-width="90" />
+                </el-table>
+                <p class="section-note">同一设备可能存在多个原因；正式接口需提供主原因、附加原因和快照时间，避免重复统计。</p>
+              </template>
+            </el-drawer>
             <div class="panel-card panel overview-trend"><ResponseChart v-if="mock" :data="response" title="全场有功 · 调度目标与实际反馈"/><el-empty v-else description="等待并网点趋势数据"/></div>
           </template>
 
