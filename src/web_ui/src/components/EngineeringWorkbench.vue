@@ -107,6 +107,7 @@ const chartOption=computed<EChartsOption>(()=>{
       <el-col :xs="24" :lg="12"><div class="panel-card panel engineering-panel">
         <h2 class="app-panel-title panel-title">参数扫描与方案比较</h2>
         <el-form label-position="top" class="engineering-form">
+          <el-row :gutter="12" style="width:100%">
           <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="扫描起始 Kp"><el-input-number v-model="startKp" :min="0.01" :max="5" :step="0.1"/></el-form-item></el-col>
           <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="扫描结束 Kp"><el-input-number v-model="endKp" :min="0.01" :max="5" :step="0.1"/></el-form-item></el-col>
           <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="扫描点数"><el-input-number v-model="steps" :min="2" :max="30" :step="1"/></el-form-item></el-col>
