@@ -71,3 +71,23 @@
 .metric-drawer-section{margin:var(--app-space-4) 0 var(--app-space-2)}
 @media(max-width:1199px){.capability-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:767px){.capability-grid{grid-template-columns:1fr}.overview-mode{gap:var(--app-space-3)}}
+
+/* Element Plus is responsible for grid placement; inner content must shrink. */
+.overview-metrics{row-gap:var(--app-space-3);margin-bottom:var(--app-space-3)}
+.overview-metrics>.el-col{display:flex;min-width:0}
+.overview-metrics .metric-card{width:100%;min-width:0;max-width:100%;overflow-wrap:anywhere}
+.control-row{row-gap:var(--app-space-3)}
+.control-row>.el-col{min-width:0}
+.control-row .stack,.control-row .panel{min-width:0;width:100%}
+.panel-card{min-width:0;max-width:100%}
+.panel-card .el-table,.panel-card .el-descriptions,.panel-card .el-tabs{width:100%;min-width:0;max-width:100%}
+.panel-card .el-form-item,.panel-card .el-form-item__content{min-width:0;max-width:100%}
+.panel-card .el-select,.panel-card .el-input,.panel-card .el-input-number{max-width:100%}
+.panel-card .el-row{min-width:0}
+.status-row>span,.status-row>b{min-width:0;overflow-wrap:anywhere}
+.capability-drawer{max-width:100vw}
+.capability-drawer .el-drawer__body{min-width:0;overflow-x:auto}
+@media(max-width:767px){
+ .status-row{flex-wrap:wrap}
+ .overview-mode{gap:var(--app-space-3)}
+}
