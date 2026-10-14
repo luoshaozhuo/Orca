@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import * as echarts from 'echarts'
-import type { ECharts } from 'echarts'
+import { computed, ref } from 'vue'
+import BaseChart from './BaseChart.vue'
+import type { EChartsOption } from 'echarts'
 import { chartVisuals, chartAxisText } from '../utils/chartTheme'
 import { response } from '../mock/data'
 
@@ -26,18 +26,13 @@ const channels = computed<Channel[]>(() => {
 })
 const selected = ref<string[]>(['全场有功', '全场无功', '平均风速', '风电有功'])
 const chartHeight = computed(() => Math.max(240, selected.value.length * 148))
-const container = ref<HTMLDivElement | null>(null)
-let chart: ECharts | undefined
-let resizeObserver: ResizeObserver | undefined
-
-function draw() {
-  if (!chart) return
+const chartOption = computed<EChartsOption>(() => {
   const data = channels.value.filter(item => selected.value.includes(item.name))
-  if (!data.length) { chart.clear(); return }
+  if (!data.length) return { series: [] }
   const count = data.length
   const gap = 7
   const block = (88 - (count - 1) * gap) / count
-  chart.setOption({
+  return {
     ...chartVisuals(),
     tooltip: { trigger: 'axis', textStyle: chartVisuals().textStyle },
     axisPointer: { link: [{ xAxisIndex: 'all' }] },
@@ -64,18 +59,9 @@ function draw() {
       xAxisIndex: index, yAxisIndex: index,
       data: item.series.map(value => Number(value.toFixed(2)))
     }))
-  }, true)
-}
-
-onMounted(() => {
-  if (!container.value) return
-  chart = echarts.init(container.value)
-  draw()
-  resizeObserver = new ResizeObserver(() => chart?.resize())
-  resizeObserver.observe(container.value)
+  }
 })
-watch(selected, draw, { flush: 'post' })
-onUnmounted(() => { resizeObserver?.disconnect(); chart?.dispose() })
+
 </script>
 
 <template>
@@ -93,7 +79,7 @@ onUnmounted(() => { resizeObserver?.disconnect(); chart?.dispose() })
     <el-checkbox-group v-model="selected" class="station-trend__selector">
       <el-checkbox v-for="c in channels" :key="c.name" :value="c.name" :label="c.name" />
     </el-checkbox-group>
-    <div ref="container" class="station-trend__chart" :style="{ height: chartHeight + 'px' }" role="img" aria-label="全场有功、无功、平均风速及风电有功同步趋势" />
+    <BaseChart :option="chartOption" :height="chartHeight + 'px'" aria-label="全场有功、无功、平均风速及风电有功同步趋势" />
   </div>
 </template>
 
