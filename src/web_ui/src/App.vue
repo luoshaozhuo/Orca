@@ -4,7 +4,7 @@ import OverviewPage from './pages/OverviewPage.vue'
 import ConfigPage from './pages/ConfigPage.vue'
 import EventsPage from './pages/EventsPage.vue'
 import ControlPage from './pages/ControlPage.vue'
-import EngineeringWorkbench from './components/EngineeringWorkbench.vue'
+import EngineeringPage from './pages/EngineeringPage.vue'
 import AnalysisPage from './pages/AnalysisPage.vue'
 type Page = 'overview' | 'control' | 'analysis' | 'config' | 'commissioning' | 'events'
 type Health = 'healthy' | 'unavailable' | 'unknown'
@@ -105,9 +105,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
           <ControlPage v-else-if="page==='control'" :mock="mock" @navigate="navigate" />
           <AnalysisPage v-else-if="page==='analysis'" :mock="mock" />
 
-          <template v-else-if="page==='commissioning'">
-            <EngineeringWorkbench />
-          </template>
+          <EngineeringPage v-else-if="page==='commissioning'" />
 
           <EventsPage v-else-if="page==='events'" :mock="mock" />
 
