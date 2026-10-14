@@ -72,16 +72,16 @@ const chartOption=computed<EChartsOption>(()=>{
     <el-alert title="离线设计沙箱 · 下方响应数据由简化示意模型生成，不代表 Controller 实际控制性能或标准验收结果。所有操作均不写设备。" type="info" :closable="false" show-icon />
     <div class="panel-card panel">
       <h2 class="app-panel-title panel-title">试验工况与控制律</h2>
-      <el-form label-position="top" class="engineering-form">
-        <el-form-item label="控制功能"><el-select v-model="functionId"><el-option v-for="f in ['AGC','AVC','PFR','IR','VR']" :key="f" :label="f" :value="f"/></el-select></el-form-item>
-        <el-form-item label="扰动"><el-select v-model="disturbance"><el-option label="阶跃" value="step"/><el-option label="斜坡" value="ramp"/><el-option label="脉冲" value="pulse"/><el-option label="历史回放（待接入）" value="history" disabled/></el-select></el-form-item>
-        <el-form-item label="幅值（示意）"><el-input-number v-model="amplitude" :min="0.1" :max="100" :step="1"/></el-form-item>
-        <el-form-item label="持续时间 (s)"><el-input-number v-model="duration" :min="10" :max="600" :step="10"/></el-form-item>
-        <el-form-item label="候选控制律"><el-select v-model="selectedLaw"><el-option label="P" value="P"/><el-option label="PI" value="PI"/><el-option label="前馈 + PI" value="FEEDFORWARD_PI"/></el-select></el-form-item>
-        <el-form-item label="Kp"><el-input-number v-model="kp" :min="0.01" :max="5" :step="0.1" :precision="2"/></el-form-item>
-        <el-form-item label="Ki"><el-input-number v-model="ki" :disabled="selectedLaw==='P'" :min="0" :max="5" :step="0.01" :precision="2"/></el-form-item>
-        <el-form-item label="链路延时 (s)"><el-input-number v-model="latency" :min="0" :max="30" :step="0.1" :precision="1"/></el-form-item>
-      </el-form>
+      <el-form label-position="top" class="engineering-form"><el-row :gutter="12" style="width:100%">
+        <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="控制功能"><el-select v-model="functionId"><el-option v-for="f in ['AGC','AVC','PFR','IR','VR']" :key="f" :label="f" :value="f"/></el-select></el-form-item></el-col>
+        <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="扰动"><el-select v-model="disturbance"><el-option label="阶跃" value="step"/><el-option label="斜坡" value="ramp"/><el-option label="脉冲" value="pulse"/><el-option label="历史回放（待接入）" value="history" disabled/></el-select></el-form-item></el-col>
+        <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="幅值（示意）"><el-input-number v-model="amplitude" :min="0.1" :max="100" :step="1"/></el-form-item></el-col>
+        <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="持续时间 (s)"><el-input-number v-model="duration" :min="10" :max="600" :step="10"/></el-form-item></el-col>
+        <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="候选控制律"><el-select v-model="selectedLaw"><el-option label="P" value="P"/><el-option label="PI" value="PI"/><el-option label="前馈 + PI" value="FEEDFORWARD_PI"/></el-select></el-form-item></el-col>
+        <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="Kp"><el-input-number v-model="kp" :min="0.01" :max="5" :step="0.1" :precision="2"/></el-form-item></el-col>
+        <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="Ki"><el-input-number v-model="ki" :disabled="selectedLaw==='P'" :min="0" :max="5" :step="0.01" :precision="2"/></el-form-item></el-col>
+        <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="链路延时 (s)"><el-input-number v-model="latency" :min="0" :max="30" :step="0.1" :precision="1"/></el-form-item></el-col>
+      </el-row></el-form>
       <el-button type="primary" @click="addBaseline">加入方案对比（本地）</el-button>
     </div>
     <el-row :gutter="12">
@@ -107,10 +107,10 @@ const chartOption=computed<EChartsOption>(()=>{
       <el-col :xs="24" :lg="12"><div class="panel-card panel engineering-panel">
         <h2 class="app-panel-title panel-title">参数扫描与方案比较</h2>
         <el-form label-position="top" class="engineering-form">
-          <el-form-item label="扫描起始 Kp"><el-input-number v-model="startKp" :min="0.01" :max="5" :step="0.1"/></el-form-item>
-          <el-form-item label="扫描结束 Kp"><el-input-number v-model="endKp" :min="0.01" :max="5" :step="0.1"/></el-form-item>
-          <el-form-item label="扫描点数"><el-input-number v-model="steps" :min="2" :max="30" :step="1"/></el-form-item>
-        </el-form>
+          <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="扫描起始 Kp"><el-input-number v-model="startKp" :min="0.01" :max="5" :step="0.1"/></el-form-item></el-col>
+          <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="扫描结束 Kp"><el-input-number v-model="endKp" :min="0.01" :max="5" :step="0.1"/></el-form-item></el-col>
+          <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="扫描点数"><el-input-number v-model="steps" :min="2" :max="30" :step="1"/></el-form-item></el-col>
+        </el-row></el-form>
         <el-button :disabled="endKp<startKp" @click="scanParameters">执行示意参数扫描</el-button>
         <BaseChart :option="chartOption" height="290px" aria-label="候选参数扫描的调节时间和超调量趋势" />
       </div></el-col>
@@ -133,12 +133,12 @@ const chartOption=computed<EChartsOption>(()=>{
 
 <style scoped>
 .engineering-stack{display:flex;flex-direction:column;gap:var(--app-space-3)}
-.engineering-form{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--app-space-2)}
+.engineering-form{width:100%;min-width:0}
 .engineering-form :deep(.el-input-number),.engineering-form :deep(.el-select){width:100%}
 .engineering-panel{height:100%;min-width:0}
 .engineering-steps{margin:var(--app-space-3) 0}
 .engineering-actions{display:flex;flex-wrap:wrap;gap:var(--app-space-2);margin-top:var(--app-space-3)}
 .engineering-chart{width:100%;height:290px;min-width:0}
-@media(max-width:1199px){.engineering-form{grid-template-columns:repeat(2,minmax(0,1fr))}.engineering-panel{margin-bottom:var(--app-space-3)}}
-@media(max-width:767px){.engineering-form{grid-template-columns:1fr}}
+@media(max-width:1199px){.engineering-panel{margin-bottom:var(--app-space-3)}}
+
 </style>
