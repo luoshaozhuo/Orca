@@ -120,8 +120,8 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                 <div class="metric-label">{{m.label}}</div><div class="app-metric metric-value">{{m.value}} <small>{{m.unit}}</small></div><div class="metric-foot">{{m.foot}}</div>
               </div>
             </div>
-            <div class="overview-grid">
-              <div class="stack">
+            <el-row :gutter="12" class="overview-rows">
+              <el-col :xs="24" :lg="14">
                 <div class="panel-card panel">
                   <h2 class="app-panel-title panel-title">控制功能与算法</h2>
                   <el-table :data="mock?controls:['AGC','AVC','PFR','IR'].map(name=>({name,enabled:'—',response:'—',algorithm:'—',uptime:'—'}))" stripe>
@@ -133,19 +133,8 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                   </el-table>
                   <p class="section-note">功能投入与功能响应分开显示；待接入 Controller 运行状态。</p>
                 </div>
-                <div class="panel-card panel">
-                  <h2 class="app-panel-title panel-title">实时性能与总体配置</h2>
-                  <el-descriptions :column="2" border>
-                    <el-descriptions-item label="控制周期设定">{{mock?station.period:'—'}} ms</el-descriptions-item>
-                    <el-descriptions-item label="控制周期偏差">{{mock?station.periodDeviation:'—'}} ms</el-descriptions-item>
-                    <el-descriptions-item label="协调策略">{{mock?station.strategy:'—'}}</el-descriptions-item>
-                    <el-descriptions-item label="配置版本">{{mock?station.version:'—'}}</el-descriptions-item>
-                    <el-descriptions-item label="控制权限">{{mock?station.controlAuthority:'未知'}}</el-descriptions-item>
-                    <el-descriptions-item label="最后有效测量">{{mock?station.lastSample:'—'}}</el-descriptions-item>
-                  </el-descriptions>
-                </div>
-              </div>
-              <div class="stack">
+              </el-col>
+              <el-col :xs="24" :lg="10">
                 <div class="panel-card panel">
                   <h2 class="app-panel-title panel-title">上位机及 Wind Hub 通信</h2>
                   <div v-if="mock" class="status-row"><span>上位机 / 调度指令源</span><el-tag type="success">正常 · 演示</el-tag></div>
@@ -158,6 +147,23 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                   <p class="section-note">服务可达性不代表业务健康。数据时效、订阅质量及写入能力需后台独立上报。</p>
 
                 </div>
+              </el-col>
+            </el-row>
+            <el-row :gutter="12" class="overview-rows">
+              <el-col :xs="24" :lg="14">
+                <div class="panel-card panel">
+                  <h2 class="app-panel-title panel-title">实时性能与总体配置</h2>
+                  <el-descriptions :column="2" border>
+                    <el-descriptions-item label="控制周期设定">{{mock?station.period:'—'}} ms</el-descriptions-item>
+                    <el-descriptions-item label="控制周期偏差">{{mock?station.periodDeviation:'—'}} ms</el-descriptions-item>
+                    <el-descriptions-item label="协调策略">{{mock?station.strategy:'—'}}</el-descriptions-item>
+                    <el-descriptions-item label="配置版本">{{mock?station.version:'—'}}</el-descriptions-item>
+                    <el-descriptions-item label="控制权限">{{mock?station.controlAuthority:'未知'}}</el-descriptions-item>
+                    <el-descriptions-item label="最后有效测量">{{mock?station.lastSample:'—'}}</el-descriptions-item>
+                  </el-descriptions>
+                </div>
+              </el-col>
+              <el-col :xs="24" :lg="10">
                 <div class="panel-card panel">
                   <h2 class="app-panel-title panel-title">运行概览</h2>
                   <div class="status-row"><span>全场额定容量</span><b>{{mock?station.rated:'—'}} MW</b></div>
@@ -165,8 +171,8 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                   <div class="status-row"><span>控制执行异常</span><b>{{mock?'1 项待确认':'—'}}</b></div>
                   <div class="status-row"><span>最近控制事件</span><b>{{mock?'14:41:12 AGC 调节':'—'}}</b></div>
                 </div>
-              </div>
-            </div>
+              </el-col>
+            </el-row>
             <div class="panel-card panel overview-trend"><ResponseChart v-if="mock" :data="response" title="全场有功 · 调度目标与实际反馈"/><el-empty v-else description="等待并网点趋势数据"/></div>
           </template>
 
