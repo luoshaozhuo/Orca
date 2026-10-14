@@ -30,6 +30,8 @@ const stages=[
  {id:'coordination',name:'功能协调'}, {id:'allocation',name:'设备分配'},
  {id:'guard',name:'执行保护'}
 ]
+const breakpointIndex=computed(()=>stages.findIndex(stage=>stage.id===breakpoint.value))
+const canRunToBreakpoint=computed(()=>breakpointIndex.value>cursor.value)
 const stageLabel=computed(()=>stages[cursor.value]?.name ?? '结束')
 const stageOutput=computed(()=>({
  source:'有效参考与来源授权检查',preprocess:'质量有效的同步输入',
@@ -39,6 +41,7 @@ const stageOutput=computed(()=>({
 } as Record<string,string>)[stages[cursor.value]?.id ?? ''] ?? '当前周期检查结束')
 
 function simulate(k:number, integral:number, law:string):Experiment {
+ // Illustrative heuristic, not a plant/controller model or validated transfer function.
  const gain=law==='P'?k:law==='PI'?k+integral*2:law==='FEEDFORWARD_PI'?k+integral*2+0.35:0.7
  const tau=18/(Math.max(0.1,gain))
  const settle=tau*3.2+latency.value
@@ -104,9 +107,9 @@ onUnmounted(()=>{ro?.disconnect();chart?.dispose()})
         <div class="engineering-actions">
           <el-button :disabled="cursor===0" @click="cursor=0">重置</el-button>
           <el-button :disabled="cursor>=stages.length-1" @click="cursor=Math.min(stages.length-1,cursor+1)">单步</el-button>
-          <el-button :disabled="cursor>=stages.length-1" @click="cursor=Math.max(cursor,stages.findIndex(s=>s.id===breakpoint))">运行至断点</el-button>
+          <el-button :disabled="!canRunToBreakpoint" @click="cursor=breakpointIndex">运行至断点</el-button>
         </div>
-        <p class="section-note">当前仅模拟节点游标，不执行真实算法；实时控制循环禁止断点暂停。</p>
+        <p class="section-note">仅离线节点游标演示，不执行实际 Controller 算法；目标断点必须位于当前节点之后。实时控制循环禁止断点暂停。</p>
       </div></el-col>
       <el-col :xs="24" :lg="12"><div class="panel-card panel engineering-panel">
         <h2 class="app-panel-title panel-title">参数扫描与方案比较</h2>
