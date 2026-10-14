@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import ResponseChart from './components/ResponseChart.vue'
 import MetricCard from './components/MetricCard.vue'
+import StationTrend from './components/StationTrend.vue'
 import { capabilityMetrics, type CapabilityMetric } from './mock/capabilities'
 import { station, controls, units, events, tests, response, unitResponse, reasons } from './mock/data'
 type Page = 'overview' | 'control' | 'config' | 'commissioning' | 'events'
@@ -210,7 +211,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                 <p class="section-note">同一设备可能存在多个原因；正式接口需提供主原因、附加原因和快照时间，避免重复统计。</p>
               </template>
             </el-drawer>
-            <div class="panel-card panel overview-trend"><ResponseChart v-if="mock" :data="response" title="全场有功 · 调度目标与实际反馈"/><el-empty v-else description="等待并网点趋势数据"/></div>
+            <div class="panel-card panel overview-trend"><StationTrend v-if="mock"/><el-empty v-else description="等待全场 P/Q、风速及风电有功趋势数据"/></div>
           </template>
 
           <template v-else-if="page==='config'">
