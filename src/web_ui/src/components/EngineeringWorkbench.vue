@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import * as echarts from 'echarts'
 import { onMounted, onUnmounted, watch } from 'vue'
 import type { ECharts } from 'echarts'
+import { chartVisuals, chartAxisText, chartLegendText } from '../utils/chartTheme'
 
 type Experiment = { id:string; law:string; kp:number; ki:number; delay:number; settle:number; error:number; overshoot:number }
 const functionId=ref('AGC')
@@ -60,9 +61,9 @@ function draw(){
  if(!chart)return
  const rows=scan.value.length?scan.value:comparison.value
  chart.setOption({
-  tooltip:{trigger:'axis'},legend:{top:0},grid:{top:48,bottom:38,left:65,right:65},
-  xAxis:{type:'category',name:'方案 / Kp',data:rows.map(r=>r.kp.toFixed(2))},
-  yAxis:[{type:'value',name:'调节时间 s',scale:true},{type:'value',name:'超调 %',scale:true}],
+  ...chartVisuals(),legend:{top:0,...chartLegendText()},grid:{top:48,bottom:38,left:65,right:65},
+  xAxis:{type:'category',name:'方案 / Kp',data:rows.map(r=>r.kp.toFixed(2)),...chartAxisText()},
+  yAxis:[{type:'value',name:'调节时间 s',scale:true,...chartAxisText()},{type:'value',name:'超调 %',scale:true,...chartAxisText()}],
   series:[
    {name:'调节时间',type:'line',data:rows.map(r=>r.settle)},
    {name:'超调量',type:'line',yAxisIndex:1,data:rows.map(r=>r.overshoot)}
