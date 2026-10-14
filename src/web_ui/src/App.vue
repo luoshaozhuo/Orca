@@ -3,15 +3,16 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import ResponseChart from './components/ResponseChart.vue'
 import MetricCard from './components/MetricCard.vue'
 import StationTrend from './components/StationTrend.vue'
+import ControlPipeline from './components/ControlPipeline.vue'
 import { capabilityMetrics, type CapabilityMetric } from './mock/capabilities'
 import { station, controls, units, events, tests, response, unitResponse, reasons } from './mock/data'
-type Page = 'overview' | 'control' | 'config' | 'commissioning' | 'events'
+type Page = 'overview' | 'control' | 'analysis' | 'config' | 'commissioning' | 'events'
 type Health = 'healthy' | 'unavailable' | 'unknown'
 type Service = { id: string; name: string; url: string; state: Health; detail: string; checkedAt?: string }
 const page = ref<Page>('overview')
 const names: Record<Page,string> = {
-  overview:'运行总览',control:'控制与分析',config:'配置管理',
-  commissioning:'调试与整定',events:'事件与审计'
+  overview:'运行总览',control:'控制工作台',analysis:'分析与评估',config:'配置管理',
+  commissioning:'工程与整定',events:'事件与审计'
 }
 const services = ref<Service[]>([
   { id:'controller',name:'Controller',url:import.meta.env.VITE_CONTROLLER_HEALTH_URL ?? '',state:'unknown',detail:'尚未配置健康接口' },
@@ -19,8 +20,9 @@ const services = ref<Service[]>([
   { id:'broker',name:'消息中间件',url:import.meta.env.VITE_BROKER_HEALTH_URL ?? '',state:'unknown',detail:'尚未配置健康接口' }
 ])
 const menu = [
-  { index:'overview',label:'运行总览' },{ index:'config',label:'配置管理' },
-  { index:'control',label:'控制与分析' },{ index:'commissioning',label:'调试与整定' },
+  { index:'overview',label:'运行总览' },{ index:'control',label:'控制工作台' },
+  { index:'analysis',label:'分析与评估' },{ index:'commissioning',label:'工程与整定' },
+  { index:'config',label:'配置管理' },
   { index:'events',label:'事件与审计' }
 ]
 const mobile = ref(false)
@@ -35,6 +37,7 @@ const selectedConfig = ref('station')
 const selectedControl = ref('station')
 const selectedAnalysis = ref('realtime')
 const commissioningTab = ref('test')
+const analysisTab = ref('performance')
 const mock = ref(true)
 const selectedUnit = ref(units[0].id)
 const activeUnit = computed(() => units.find(u => u.id === selectedUnit.value) ?? units[0])
@@ -254,6 +257,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
           </template>
 
           <template v-else-if="page==='control'">
+            <ControlPipeline />
             <el-tabs v-model="selectedControl">
               <el-tab-pane label="全场控制" name="station"/>
               <el-tab-pane label="机组控制" name="units"/>
@@ -285,7 +289,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                   </div>
                   <ResponseChart v-if="mock" :data="selectedControl==='station'?response:unitResponse" :title="selectedControl==='station'?'全场指令与实测响应':'机组指令与实测响应'"/><div v-else class="chart-placeholder">趋势接口待接入</div>
                   <p class="section-note">同一时轴展示指令时间、反馈数据时间及质量状态。可跳转调试页查看性能指标。</p>
-                  <el-button @click="navigate('commissioning')">转到调试与效果分析</el-button>
+                  <el-button @click="navigate('commissioning')">转到工程与整定</el-button>
                 </div>
                 <div class="panel-card panel"><h2 class="app-panel-title panel-title">本次控制效果</h2>
                   <div class="status-row"><span>跟踪误差</span><b>{{mock?'0.62 MW':'—'}}</b></div>
@@ -295,6 +299,57 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
                   <el-button @click="navigate('events')">查看控制审计</el-button>
                 </div>
               </div>
+            </div>
+          </template>
+
+          <template v-else-if="page==='analysis'">
+            <el-tabs v-model="analysisTab">
+              <el-tab-pane label="动态性能" name="performance" />
+              <el-tab-pane label="标准符合性" name="compliance" />
+              <el-tab-pane label="信号与频域分析" name="signal" />
+              <el-tab-pane label="系统辨识" name="identification" />
+              <el-tab-pane label="寻因分析" name="diagnosis" />
+            </el-tabs>
+            <div class="panel-card panel" v-if="analysisTab==='performance'">
+              <h2 class="app-panel-title panel-title">动态性能与响应评价</h2>
+              <ResponseChart v-if="mock" :data="response" title="AGC 阶跃 · 目标 / 响应" />
+              <el-table :data="mock ? tests : []" stripe>
+                <el-table-column prop="id" label="试验" />
+                <el-table-column prop="algorithm" label="算法" />
+                <el-table-column prop="settle" label="调节时间 (s)" />
+                <el-table-column prop="overshoot" label="超调 (%)" />
+                <el-table-column prop="error" label="稳态误差 (MW)" />
+              </el-table>
+            </div>
+            <div v-else-if="analysisTab==='compliance'" class="panel-card panel">
+              <h2 class="app-panel-title panel-title">标准符合性与试验证据</h2>
+              <el-alert title="先配置适用标准、项目条款、测量边界和批准判据；证据不足不自动判定合格。" type="warning" :closable="false" show-icon />
+              <el-table :data="[{name:'AGC 跟踪偏差',basis:'项目 AGC 要求',status:'待评价'},{name:'PFR 响应与调节时间',basis:'批准的一次调频试验方案',status:'待评价'},{name:'测频精度',basis:'适用测频条款',status:'待评价'}]">
+                <el-table-column prop="name" label="指标" /><el-table-column prop="basis" label="评价依据" /><el-table-column prop="status" label="结果" />
+              </el-table>
+            </div>
+            <div v-else-if="analysisTab==='signal'" class="panel-card panel">
+              <h2 class="app-panel-title panel-title">信号与频域分析</h2>
+              <el-alert title="计划支持 FFT / Welch PSD / 互相关 / 相干函数 / FRF；需统一采样时间和质量码。" type="info" :closable="false" />
+              <ResponseChart v-if="mock" :data="response" title="时域窗口 · 示意" />
+              <el-empty v-else description="等待历史数据集" />
+            </div>
+            <div v-else-if="analysisTab==='identification'" class="panel-card panel">
+              <h2 class="app-panel-title panel-title">系统辨识</h2>
+              <el-descriptions :column="1" border>
+                <el-descriptions-item label="输入">参考目标 / 注入扰动</el-descriptions-item>
+                <el-descriptions-item label="输出">PCC 有功、无功反馈</el-descriptions-item>
+                <el-descriptions-item label="模型">一阶惯性滞后 / 二阶模型 / 状态空间 / FRF</el-descriptions-item>
+                <el-descriptions-item label="校核">独立数据集拟合与残差检查</el-descriptions-item>
+              </el-descriptions>
+              <el-button disabled>开始辨识（后端待接入）</el-button>
+            </div>
+            <div v-else class="panel-card panel">
+              <h2 class="app-panel-title panel-title">寻因分析与证据</h2>
+              <el-alert title="相关性不能替代因果验证：须保留统一时间轴、控制阶段输出和设备执行证据。" type="info" :closable="false" />
+              <el-table :data="mock ? reasons : []">
+                <el-table-column prop="name" label="候选因素" /><el-table-column prop="contribution" label="初步影响" /><el-table-column prop="evidence" label="证据示意" />
+              </el-table>
             </div>
           </template>
 
