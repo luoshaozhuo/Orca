@@ -1,0 +1,31 @@
+/* Orca-specific layout only. Theme, typography and Element Plus rules are from Wind Hub. */
+.header-right,.actions{display:flex;align-items:center;gap:var(--app-space-2);flex-wrap:wrap}
+.header-title{font-weight:var(--app-font-weight-semibold);font-size:var(--app-font-section-title)}
+.header-subtitle{margin-left:var(--app-space-2);font-weight:var(--app-font-weight-regular)}
+.page-head{align-items:flex-end;margin-bottom:var(--app-space-4)}
+.page-head p{margin:var(--app-space-2) 0 0}
+.panel{min-width:0}
+.panel-title{margin-bottom:var(--app-space-3)}
+.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--app-space-3);margin-bottom:var(--app-space-3)}
+.metric-label{font-size:var(--app-font-label);color:var(--app-text-secondary)}
+.metric-value{margin-top:var(--app-space-2)}
+.metric-value small{font-size:var(--app-font-label);font-weight:var(--app-font-weight-medium)}
+.metric-foot,.section-note{font-size:var(--app-font-caption);color:var(--app-text-secondary);line-height:var(--app-line-height-body)}
+.metric-foot{margin-top:var(--app-space-2)}
+.overview-grid{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(320px,1fr);gap:var(--app-space-3)}
+.overview-grid>.stack{min-width:0}
+.content-grid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:var(--app-space-3)}
+.stack{display:flex;flex-direction:column;gap:var(--app-space-3)}
+.stack>.panel{flex:0 0 auto}
+.overview-trend{margin-top:var(--app-space-3)}
+.status-row{display:flex;align-items:center;justify-content:space-between;gap:var(--app-space-2);min-height:var(--app-row-min-height);padding:var(--app-space-2) 0;border-bottom:1px solid var(--app-border-soft);font-size:var(--app-font-body)}
+.status-row:last-child{border-bottom:0}
+.chart-placeholder{height:var(--app-chart-height-md);display:flex;align-items:center;justify-content:center;text-align:center;background:var(--app-bg-subtle);color:var(--app-text-secondary);border:1px dashed var(--app-border);border-radius:var(--app-panel-radius)}
+.service-health{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--app-space-3)}
+.service-tile{min-width:0;border:1px solid var(--app-border);border-radius:var(--app-panel-radius);padding:var(--app-space-4)}
+.service-tile b{display:block;margin-bottom:var(--app-space-2)}
+.secondary{color:var(--app-text-secondary)}
+.error-bar{display:flex;justify-content:space-between;align-items:center;padding:var(--app-space-3) var(--app-space-6);background:var(--el-color-danger-light-9);color:var(--el-color-danger);font-size:var(--app-font-body)}
+.log-line{padding:var(--app-space-3) 0;border-bottom:1px solid var(--app-border-soft);font-family:monospace;font-size:var(--app-font-body)}
+@media(max-width:1199px){.overview-grid,.content-grid{grid-template-columns:1fr}.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:767px){.summary-grid,.service-health{grid-template-columns:1fr}.page-head{align-items:flex-start}.header-subtitle{display:none}}
