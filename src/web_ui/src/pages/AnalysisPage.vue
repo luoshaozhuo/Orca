@@ -8,7 +8,6 @@ const analysisTab = ref('performance')
 </script>
 
 <template>
-<template>
             <el-tabs v-model="analysisTab">
               <el-tab-pane label="动态性能" name="performance" />
               <el-tab-pane label="标准符合性" name="compliance" />
@@ -53,5 +52,4 @@ const analysisTab = ref('performance')
                 <el-table-column prop="name" label="候选因素" /><el-table-column prop="contribution" label="初步影响" /><el-table-column prop="evidence" label="证据示意" />
               </el-table>
             </div>
-</template>
 </template>
