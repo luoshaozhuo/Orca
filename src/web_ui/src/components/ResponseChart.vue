@@ -1,13 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import * as echarts from 'echarts'
-import type { ECharts } from 'echarts'
+import { computed } from 'vue'
+import BaseChart from './BaseChart.vue'
 import { chartVisuals, chartAxisText, chartLegendText, chartZoomText } from '../utils/chartTheme'
 import type { PlotPoint } from '../mock/data'
 const props=withDefaults(defineProps<{ data:PlotPoint[]; unit?:string; title?:string }>(),{unit:'MW',title:'指令与响应'})
-const el=ref<HTMLDivElement|null>(null)
-let instance:ECharts|undefined
-let resizeObserver:ResizeObserver|undefined
 const option=computed(()=>({
  ...chartVisuals(),
  legend:{top:0,data:['下发目标','实际反馈','功率限值'],...chartLegendText()},
@@ -21,12 +17,8 @@ const option=computed(()=>({
   {name:'功率限值',type:'line' as const,showSymbol:false,lineStyle:{type:'dashed' as const},data:props.data.map(p=>p.limit)}
  ]
 }))
-function render(){instance?.setOption(option.value,true)}
-onMounted(()=>{if(!el.value)return;instance=echarts.init(el.value);render();resizeObserver=new ResizeObserver(()=>instance?.resize());resizeObserver.observe(el.value)})
-watch(option,render)
-onUnmounted(()=>{resizeObserver?.disconnect();instance?.dispose()})
 </script>
-<template><div class="trend-panel"><div class="trend-heading">{{title}} <span>MOCK DATA</span></div><div ref="el" class="trend-chart" role="img" :aria-label="title"/></div></template>
+<template><div class="trend-panel"><div class="trend-heading">{{title}} <span>MOCK DATA</span></div><BaseChart :option="option" height="330px" :aria-label="title" /></div></template>
 <style scoped>
 .trend-panel{min-width:0;width:100%}.trend-heading{font-weight:var(--app-font-weight-semibold);font-size:var(--app-font-panel-title);margin-bottom:var(--app-space-2)}.trend-heading span{font-size:var(--app-font-caption);color:var(--app-text-secondary);font-weight:var(--app-font-weight-regular);margin-left:var(--app-space-2)}
 .trend-chart{height:330px;width:100%;min-width:0}
