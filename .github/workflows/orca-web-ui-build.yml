@@ -1,0 +1,40 @@
+name: Orca Web UI build
+
+on:
+  push:
+    branches:
+      - feat/web-ui-control-observability
+    paths:
+      - 'src/web_ui/**'
+      - '.github/workflows/orca-web-ui-build.yml'
+  pull_request:
+    paths:
+      - 'src/web_ui/**'
+      - '.github/workflows/orca-web-ui-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck-and-build:
+    name: Vue typecheck / Vite build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/web_ui
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/web_ui/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Vue TypeScript validation
+        run: npx vue-tsc --noEmit
+      - name: Vite production build
+        run: npx vite build
