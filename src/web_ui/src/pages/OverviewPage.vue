@@ -17,27 +17,27 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
 <template>
  <div>
 
-            <div class="summary-grid">
-              <MetricCard v-for="m in [
+            <el-row :gutter="12" class="overview-metrics">
+              <el-col v-for="m in [
                 {label:'并网点有功',value:mock?station.active.toFixed(1):'—',unit:'MW',summary:mock?'负荷率 62.2% · 模拟':'实际测量待接入',definition:'并网点有功功率，采用带质量标记的最新有效测量，单位 MW。'},
                 {label:'并网点无功',value:mock?station.reactive.toFixed(1):'—',unit:'Mvar',summary:mock?'全场并网点实测 · 模拟':'实际测量待接入',definition:'并网点无功功率，按场站统一的无功正负方向约定显示。'},
                 {label:'并网点电压',value:mock?station.voltage.toFixed(2):'—',unit:'kV',summary:mock?'35 kV 母线 · 模拟':'实际测量待接入',definition:'并网点电压有效测量值；计量位置及线电压/相电压口径由配置确定。'},
                 {label:'系统频率',value:mock?station.frequency.toFixed(2):'—',unit:'Hz',summary:mock?'额定 50 Hz · 模拟':'实际测量待接入',definition:'控制所采用的频率测量，须带原始时标、有效性和数据质量状态。'}
-              ]" :key="m.label" v-bind="m" />
-            </div>
+              ]" :key="m.label" :xs="24" :sm="12" :lg="6"><MetricCard v-bind="m" /></el-col>
+            </el-row>
             <div class="panel-card panel overview-mode">
               <div><span class="metric-label">当前控制模式</span><strong>{{ mock ? '远方自动 · AGC + PFR' : '未知 · 控制状态待接入' }}</strong></div>
               <div><span class="metric-label">控制权</span><strong>{{ mock ? station.controlAuthority : '未知' }}</strong></div>
               <div><span class="metric-label">执行策略</span><strong>{{ mock ? station.strategy : '未知' }}</strong></div>
             </div>
             <h2 class="app-panel-title panel-title">全场可控能力</h2>
-            <div class="summary-grid capability-grid">
-              <MetricCard v-for="metric in capabilityMetrics" :key="metric.id"
+            <el-row :gutter="12" class="overview-metrics">
+              <el-col v-for="metric in capabilityMetrics" :key="metric.id" :xs="24" :sm="12" :md="8" :xl="4" class="capability-col"><MetricCard
                 :label="metric.label" :value="mock ? metric.value : '—'" :unit="metric.unit"
                 :summary="mock ? metric.summary : '设备与能力快照待接入'"
                 :definition="metric.definition" :clickable="mock" :warning="mock && metric.details.length > 0"
-                @open="openMetric(metric)" />
-            </div>
+                @open="openMetric(metric)" /></el-col>
+            </el-row>
             <el-row :gutter="12" class="overview-rows">
               <el-col :xs="24" :lg="14">
                 <div class="panel-card panel">
