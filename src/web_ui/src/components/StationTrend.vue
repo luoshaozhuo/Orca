@@ -42,20 +42,20 @@ const chartOption = computed<EChartsOption>(() => {
       height: block + '%', containLabel: true
     })),
     xAxis: data.map((_, index) => ({
-      type: 'category', gridIndex: index, boundaryGap: false,
+      type: 'category' as const, gridIndex: index, boundaryGap: false,
       data: response.map(point => point.time),
       axisLabel: { ...chartAxisText().axisLabel, show: index === count - 1 },
       name: index === count - 1 ? '时间' : '',
       nameTextStyle: chartAxisText().nameTextStyle
     })),
     yAxis: data.map((item, index) => ({
-      type: 'value', gridIndex: index, scale: true,
+      type: 'value' as const, gridIndex: index, scale: true,
       name: item.name + ' (' + item.unit + ')',
       ...chartAxisText()
     })),
     dataZoom: [{ type: 'inside', xAxisIndex: data.map((_, index) => index) }],
     series: data.map((item, index) => ({
-      name: item.name, type: 'line', showSymbol: false,
+      name: item.name, type: 'line' as const, showSymbol: false,
       xAxisIndex: index, yAxisIndex: index,
       data: item.series.map(value => Number(value.toFixed(2)))
     }))
