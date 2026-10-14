@@ -55,12 +55,10 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
               <el-col :xs="24" :lg="10">
                 <div class="panel-card panel">
                   <h2 class="app-panel-title panel-title">上位机及 Wind Hub 通信</h2>
-                  <div v-if="mock" class="status-row"><span>上位机 / 调度指令源</span><el-tag type="success">正常 · 演示</el-tag></div>
-                  <div v-if="mock" class="status-row"><span>Commander gRPC</span><el-tag type="success">正常 · 演示</el-tag></div>
-                  <div v-if="mock" class="status-row"><span>消息中间件订阅</span><el-tag type="success">正常 · 演示</el-tag></div>
-                  <div v-if="!mock" class="status-row"><span>上位机 / 调度指令源</span><el-tag type="info">待接入</el-tag></div>
-                  <div v-if="!mock" v-for="s in services" :key="s.id" class="status-row">
-                    <span>{{s.name}}</span><el-tag :type="statusType(s.state)">{{statusLabel(s.state)}}</el-tag>
+                  <div class="status-row"><span>上位机 / 调度指令源</span><el-tag type="info">运行状态待接入</el-tag></div>
+                  <div v-for="service in services" :key="service.id" class="status-row">
+                    <span>{{service.name}}</span>
+                    <el-tag :type="statusType(service.state)">{{statusLabel(service.state)}}</el-tag>
                   </div>
                   <p class="section-note">服务可达性不代表业务健康。数据时效、订阅质量及写入能力需后台独立上报。</p>
 
@@ -91,7 +89,7 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
                 </div>
               </el-col>
             </el-row>
-            <el-drawer v-model="metricDrawerOpen" direction="rtl" size="min(680px, 100%)"
+            <el-drawer v-model="metricDrawerOpen" direction="rtl" size="680px" class="capability-drawer"
                        :title="selectedMetric?.label + ' · 详细原因'">
               <template v-if="selectedMetric">
                 <el-descriptions :column="1" border>
