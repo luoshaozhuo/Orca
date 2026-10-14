@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import type { ECharts } from 'echarts'
+import { chartVisuals, chartAxisText, chartZoomText } from '../utils/chartTheme'
 import { response } from '../mock/data'
 
 type Channel = { name: string; unit: string; value: number; series: number[] }
@@ -32,17 +33,17 @@ function draw() {
   if (!chart) return
   const data = channels.value.filter(channel => selected.value.includes(channel.name))
   chart.setOption({
-    tooltip: { trigger: 'axis' },
+    ...chartVisuals(),
     legend: { show: false },
     grid: { top: 28, left: 110, right: 125, bottom: 45 },
-    xAxis: { type: 'category', data: response.map(point => point.time), boundaryGap: false },
+    xAxis: { type: 'category', data: response.map(point => point.time), boundaryGap: false, ...chartAxisText() },
     yAxis: data.map((channel, index) => ({
-      type: 'value', name: channel.unit, scale: true,
+      type: 'value', name: channel.unit, scale: true, ...chartAxisText(),
       position: index % 2 === 0 ? 'left' : 'right',
       offset: Math.floor(index / 2) * 55,
       axisLine: { show: false }, splitLine: { show: index === 0 }
     })),
-    dataZoom: [{ type: 'inside' }, { type: 'slider', height: 14, bottom: 5 }],
+    dataZoom: [{ type: 'inside' }, { type: 'slider', height: 14, bottom: 5, ...chartZoomText() }],
     series: data.map((channel, index) => ({
       name: channel.name, type: 'line', showSymbol: false,
       yAxisIndex: index, data: channel.series.map(n => Number(n.toFixed(2)))
