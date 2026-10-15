@@ -6,7 +6,8 @@ import EventsPage from './pages/EventsPage.vue'
 import ControlPage from './pages/ControlPage.vue'
 import EngineeringPage from './pages/EngineeringPage.vue'
 import AnalysisPage from './pages/AnalysisPage.vue'
-import { isApiConfigured } from './api/client'
+import { controllerApi, isApiConfigured } from './api/client'
+import { useResource } from './composables/useControllerReadModel'
 type Page = 'overview' | 'control' | 'analysis' | 'config' | 'commissioning' | 'events'
 type Health = 'healthy' | 'unavailable' | 'unknown'
 type Service = { id: string; name: string; url: string; state: Health; detail: string; checkedAt?: string }
@@ -30,6 +31,8 @@ const mobile = ref(false)
 const drawer = ref(false)
 const showDetails = ref(false)
 const mock = ref(!isApiConfigured())
+const controllerInfo = useResource(controllerApi.runtimeInfo, 30000)
+const controllerVersion = computed(() => controllerInfo.state.value==='ready' ? controllerInfo.data.value?.controllerVersion ?? '—' : '—')
 const errors = computed(() => services.value.filter(s => s.state === 'unavailable'))
 function navigate(key:string){page.value=key as Page;drawer.value=false}
 let timer: ReturnType<typeof setInterval> | undefined
@@ -78,7 +81,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
           <div class="version-summary" aria-label="版本信息">
             <span class="version-item"><span class="version-label">Web</span><b>v0.1.0</b></span>
             <span class="version-separator">|</span>
-            <span class="version-item"><span class="version-label">Controller</span><b>—</b></span>
+            <span class="version-item"><span class="version-label">Controller</span><b>{{controllerVersion}}</b></span>
           </div>
         </div>
       </el-header>
