@@ -106,7 +106,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
           <ControlPage v-else-if="page==='control'" :mock="mock" @navigate="navigate" />
           <AnalysisPage v-else-if="page==='analysis'" :mock="mock" />
 
-          <EngineeringPage v-else-if="page==='commissioning'" />
+          <EngineeringPage v-else-if="page==='commissioning'" :mock="mock" />
 
           <EventsPage v-else-if="page==='events'" :mock="mock" />
 
