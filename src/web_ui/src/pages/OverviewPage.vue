@@ -1,13 +1,24 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import MetricCard from '../components/MetricCard.vue'
 import StationTrend from '../components/StationTrend.vue'
 import { capabilityMetrics, type CapabilityMetric } from '../mock/capabilities'
 import { station, controls } from '../mock/data'
+import { useStationReadModel } from '../composables/useControllerReadModel'
+import type { Measurement } from '../api/contracts'
 
 type Health = 'healthy' | 'unavailable' | 'unknown'
 type Service = { id: string; name: string; url: string; state: Health; detail: string; checkedAt?: string }
-defineProps<{ mock: boolean; services: Service[] }>()
+const props = defineProps<{ mock: boolean; services: Service[] }>()
+const live = useStationReadModel()
+function display(value: Measurement | undefined, digits: number): string {
+  return value?.quality === 'GOOD' && value.value !== null && value.value !== undefined && Number.isFinite(value.value)
+    ? value.value.toFixed(digits) : '—'
+}
+const liveFunctions = computed(() => (live.functions.data.value ?? []).map(f => ({
+ name:f.name, enabled:f.enabled === null?'未知':f.enabled?'已投入':'已退出', response:f.responseState,
+ algorithm:f.algorithm ?? '—', uptime:f.uptimeSeconds === null?'—':`${Math.round(f.uptimeSeconds/60)} min`
+})))
 const selectedMetric = ref<CapabilityMetric | null>(null)
 const metricDrawerOpen = ref(false)
 const openMetric = (metric: CapabilityMetric) => { selectedMetric.value = metric; metricDrawerOpen.value = true }
@@ -19,16 +30,16 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
 
             <el-row :gutter="12" class="overview-metrics">
               <el-col v-for="m in [
-                {label:'并网点有功',value:mock?station.active.toFixed(1):'—',unit:'MW',summary:mock?'负荷率 62.2% · 模拟':'实际测量待接入',definition:'并网点有功功率，采用带质量标记的最新有效测量，单位 MW。'},
-                {label:'并网点无功',value:mock?station.reactive.toFixed(1):'—',unit:'Mvar',summary:mock?'全场并网点实测 · 模拟':'实际测量待接入',definition:'并网点无功功率，按场站统一的无功正负方向约定显示。'},
-                {label:'并网点电压',value:mock?station.voltage.toFixed(2):'—',unit:'kV',summary:mock?'35 kV 母线 · 模拟':'实际测量待接入',definition:'并网点电压有效测量值；计量位置及线电压/相电压口径由配置确定。'},
-                {label:'系统频率',value:mock?station.frequency.toFixed(2):'—',unit:'Hz',summary:mock?'额定 50 Hz · 模拟':'实际测量待接入',definition:'控制所采用的频率测量，须带原始时标、有效性和数据质量状态。'}
+                {label:'并网点有功',value:mock?station.active.toFixed(1):display(live.station.data?.activePower,1),unit:'MW',summary:mock?'负荷率 62.2% · 模拟':'实际测量待接入',definition:'并网点有功功率，采用带质量标记的最新有效测量，单位 MW。'},
+                {label:'并网点无功',value:mock?station.reactive.toFixed(1):display(live.station.data?.reactivePower,1),unit:'Mvar',summary:mock?'全场并网点实测 · 模拟':'实际测量待接入',definition:'并网点无功功率，按场站统一的无功正负方向约定显示。'},
+                {label:'并网点电压',value:mock?station.voltage.toFixed(2):display(live.station.data?.voltage,2),unit:'kV',summary:mock?'35 kV 母线 · 模拟':'实际测量待接入',definition:'并网点电压有效测量值；计量位置及线电压/相电压口径由配置确定。'},
+                {label:'系统频率',value:mock?station.frequency.toFixed(2):display(live.station.data?.frequency,2),unit:'Hz',summary:mock?'额定 50 Hz · 模拟':'实际测量待接入',definition:'控制所采用的频率测量，须带原始时标、有效性和数据质量状态。'}
               ]" :key="m.label" :xs="24" :sm="12" :lg="6"><MetricCard v-bind="m" /></el-col>
             </el-row>
             <el-card shadow="never" class="panel-card panel overview-mode">
-              <div><span class="metric-label">当前控制模式</span><strong>{{ mock ? '远方自动 · AGC + PFR' : '未知 · 控制状态待接入' }}</strong></div>
-              <div><span class="metric-label">控制权</span><strong>{{ mock ? station.controlAuthority : '未知' }}</strong></div>
-              <div><span class="metric-label">执行策略</span><strong>{{ mock ? station.strategy : '未知' }}</strong></div>
+              <div><span class="metric-label">当前控制模式</span><strong>{{ mock ? '远方自动 · AGC + PFR' : (live.healthy ? live.station.data?.mode ?? '未知' : '未知 · 数据无效') }}</strong></div>
+              <div><span class="metric-label">控制权</span><strong>{{ mock ? station.controlAuthority : (live.healthy ? live.station.data?.authority ?? '未知' : '未知') }}</strong></div>
+              <div><span class="metric-label">执行策略</span><strong>{{ mock ? station.strategy : (live.healthy ? live.station.data?.strategy ?? '未知' : '未知') }}</strong></div>
             </el-card>
             <h2 class="app-panel-title panel-title">全场可控能力</h2>
             <el-row :gutter="12" class="overview-metrics">
@@ -42,7 +53,7 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
               <el-col :xs="24" :lg="14">
                 <el-card shadow="never" class="panel-card panel">
                   <h2 class="app-panel-title panel-title">控制功能与算法</h2>
-                  <el-table :data="mock?controls:['AGC','AVC','PFR','IR'].map(name=>({name,enabled:'—',response:'—',algorithm:'—',uptime:'—'}))" stripe>
+                  <el-table :data="mock?controls:liveFunctions" stripe>
                     <el-table-column prop="name" label="功能" width="90"/>
                     <el-table-column prop="enabled" label="投入状态"/>
                     <el-table-column prop="response" label="响应状态"/>
@@ -70,20 +81,20 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
                 <el-card shadow="never" class="panel-card panel">
                   <h2 class="app-panel-title panel-title">实时性能与总体配置</h2>
                   <el-descriptions :column="2" border>
-                    <el-descriptions-item label="控制周期设定">{{mock?station.period:'—'}} ms</el-descriptions-item>
-                    <el-descriptions-item label="控制周期偏差">{{mock?station.periodDeviation:'—'}} ms</el-descriptions-item>
-                    <el-descriptions-item label="协调策略">{{mock?station.strategy:'—'}}</el-descriptions-item>
-                    <el-descriptions-item label="配置版本">{{mock?station.version:'—'}}</el-descriptions-item>
-                    <el-descriptions-item label="控制权限">{{mock?station.controlAuthority:'未知'}}</el-descriptions-item>
-                    <el-descriptions-item label="最后有效测量">{{mock?station.lastSample:'—'}}</el-descriptions-item>
+                    <el-descriptions-item label="控制周期设定">{{mock?station.period:display(live.station.data?.periodMs,0)}} ms</el-descriptions-item>
+                    <el-descriptions-item label="控制周期偏差">{{mock?station.periodDeviation:display(live.station.data?.periodDeviationMs,1)}} ms</el-descriptions-item>
+                    <el-descriptions-item label="协调策略">{{mock?station.strategy:(live.healthy ? live.station.data?.strategy ?? '—' : '—')}}</el-descriptions-item>
+                    <el-descriptions-item label="配置版本">{{mock?station.version:live.station.data?.version ?? '—'}}</el-descriptions-item>
+                    <el-descriptions-item label="控制权限">{{mock?station.controlAuthority:(live.healthy ? live.station.data?.authority ?? '未知':'未知')}}</el-descriptions-item>
+                    <el-descriptions-item label="最后有效测量">{{mock?station.lastSample:live.station.data?.timestamp ?? '—'}}</el-descriptions-item>
                   </el-descriptions>
                 </el-card>
               </el-col>
               <el-col :xs="24" :lg="10">
                 <el-card shadow="never" class="panel-card panel">
                   <h2 class="app-panel-title panel-title">运行概览</h2>
-                  <div class="status-row"><span>全场额定容量</span><b>{{mock?station.rated:'—'}} MW</b></div>
-                  <div class="status-row"><span>可用调节容量</span><b>{{mock?station.available:'—'}} MW</b></div>
+                  <div class="status-row"><span>全场额定容量</span><b>{{mock?station.rated:display(live.station.data?.ratedPower,1)}} MW</b></div>
+                  <div class="status-row"><span>可用调节容量</span><b>{{mock?station.available:display(live.station.data?.availablePower,1)}} MW</b></div>
                   <div class="status-row"><span>控制执行异常</span><b>{{mock?'1 项待确认':'—'}}</b></div>
                   <div class="status-row"><span>最近控制事件</span><b>{{mock?'14:41:12 AGC 调节':'—'}}</b></div>
                 </el-card>
