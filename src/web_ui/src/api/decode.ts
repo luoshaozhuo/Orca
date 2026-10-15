@@ -131,7 +131,7 @@ const isPipelineStage: Guard<PipelineStage> = (value): value is PipelineStage =>
   isArrayOf(value.inputs,isText) && isArrayOf(value.outputs,isText) &&
   (value.status === 'READY' || value.status === 'BLOCKED' || value.status === 'UNKNOWN')
 const isPipeline: Guard<PipelineSnapshot> = (value): value is PipelineSnapshot =>
-  isRecord(value) && isTimestamp(value.timestamp) && isQuality(value.quality) &&
+  isRecord(value) && isText(value.functionId) && isTimestamp(value.timestamp) && isQuality(value.quality) &&
   isArrayOf(value.stages,isPipelineStage)
 
 const isCommandAudit: Guard<CommandAudit> = (value): value is CommandAudit =>
