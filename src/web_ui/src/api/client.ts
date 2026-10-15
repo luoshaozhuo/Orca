@@ -1,7 +1,7 @@
 import type {
   AuditEvent, CapabilitySnapshot, CommandAudit, ConfigValidation, ControllerConfiguration,
   ControlFunction, DeviceSnapshot, HistorySeries, OfflineExperiment, PipelineSnapshot,
-  StationSnapshot
+  RuntimeInfo, StationSnapshot
 } from './contracts'
 
 export class ApiError extends Error {
@@ -43,6 +43,7 @@ function query(params: Record<string, string | number | undefined>): string {
 
 /** Candidate read-side REST contract. Endpoints require backend implementation; no command writes. */
 export const controllerApi = {
+  runtimeInfo: () => request<RuntimeInfo>('/v1/system/info'),
   station: () => request<StationSnapshot>('/v1/station/snapshot'),
   functions: () => request<ControlFunction[]>('/v1/control/functions'),
   capabilities: () => request<CapabilitySnapshot[]>('/v1/control/capabilities'),
