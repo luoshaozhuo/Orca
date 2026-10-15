@@ -1,7 +1,7 @@
 import type {
   AuditEvent, AssessmentResult, CapabilityReason, CapabilitySnapshot, CommandAudit, ConfigValidation,
   ControllerConfiguration, ControlFunction, DataQuality, DeviceSnapshot, DiagnosticFinding, ExecutionState,
-  HistoryPoint, HistorySeries, IdentificationResult, Measurement, OfflineExperiment, PipelineSnapshot,
+  HistoryPoint, HistorySeries, IdentificationResult, Measurement, OfflineExperiment, PerformanceResult, PipelineSnapshot,
   PipelineStage, RuntimeInfo, StationSnapshot
 } from './contracts'
 
@@ -95,6 +95,16 @@ const isConfigValidation: Guard<ConfigValidation> = (value): value is ConfigVali
   isArrayOf(value.errors, (error: unknown): error is {path:string;message:string} =>
     isRecord(error) && isText(error.path) && isText(error.message))
 
+const isPerformance: Guard<PerformanceResult> = (value): value is PerformanceResult => {
+  if (!isRecord(value) || !isText(value.id) || !isTimestamp(value.timestamp) ||
+    !isText(value.functionId) || !isText(value.algorithm) ||
+    !isNullableNumber(value.settlingTimeS) || !isNullableNumber(value.overshootPercent) ||
+    !isNullableNumber(value.trackingErrorMW) || !isArrayOf(value.evidenceIds,isText)) return false
+  if (value.validity !== 'VALID' && value.validity !== 'INVALID' &&
+      value.validity !== 'UNKNOWN') return false
+  return value.validity !== 'VALID' || value.evidenceIds.length > 0
+}
+
 const isAssessment: Guard<AssessmentResult> = (value): value is AssessmentResult => {
   if (!isRecord(value) || !isText(value.id) || !isText(value.name) ||
     !isText(value.standard) || !isText(value.criterion) || !isText(value.detail) ||
@@ -163,6 +173,7 @@ export const decodeController = {
   experiments: (value: unknown) => decode(value,arrayOf(isOfflineExperiment),'离线试验'),
   pipeline: (value: unknown) => decode(value,isPipeline,'Pipeline 快照'),
   commandAudit: (value: unknown) => decode(value,isCommandAudit,'指令审计'),
+  performance: (value: unknown) => decode(value,arrayOf(isPerformance),'动态性能'),
   assessments: (value: unknown) => decode(value,arrayOf(isAssessment),'标准评价'),
   identifications: (value: unknown) => decode(value,arrayOf(isIdentification),'系统辨识'),
   diagnostics: (value: unknown) => decode(value,arrayOf(isDiagnostic),'候选诊断')
