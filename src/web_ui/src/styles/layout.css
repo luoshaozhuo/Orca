@@ -98,11 +98,16 @@ body{margin:0;color:var(--app-text-primary);background:var(--app-bg-page)}
 .toolbar,.page-head{justify-content:space-between}
 .right{justify-content:flex-end}
 .pagination{display:flex;justify-content:flex-end;padding-top:var(--app-space-3)}
-.panel-card{
-  border:1px solid var(--app-border);
+.panel-card.el-card{
+  min-width:0;
+  max-width:100%;
+  border-color:var(--app-border);
   border-radius:var(--app-panel-radius);
-  padding:var(--app-space-4);
   background:var(--app-bg-surface);
+}
+.panel-card.el-card>.el-card__body{
+  min-width:0;
+  padding:var(--app-space-4);
 }
 .empty-state{
   border:1px dashed var(--app-border);
