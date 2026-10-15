@@ -139,7 +139,6 @@ const chartOption=computed<EChartsOption>(()=>{
 .engineering-panel{height:100%;min-width:0}
 .engineering-steps{margin:var(--app-space-3) 0}
 .engineering-actions{display:flex;flex-wrap:wrap;gap:var(--app-space-2);margin-top:var(--app-space-3)}
-.engineering-chart{width:100%;height:290px;min-width:0}
 @media(max-width:1199px){.engineering-panel{margin-bottom:var(--app-space-3)}}
 
 </style>
