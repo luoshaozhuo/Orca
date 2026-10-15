@@ -59,7 +59,7 @@ const chartOption=computed<EChartsOption>(()=>{
 })
 </script>
 <template>
- <div class="panel-card panel">
+ <el-card shadow="never" class="panel-card panel">
   <h2 class="app-panel-title panel-title">时域 · 幅度谱 · Welch PSD · 时滞相关</h2>
   <el-alert title="基于模拟波形计算 DFT 幅度谱与 Welch 功率谱密度。相关性不证明因果；示例采样间隔 2 s。" type="info" :closable="false" show-icon/>
   <div class="signal-tools">
@@ -78,7 +78,7 @@ const chartOption=computed<EChartsOption>(()=>{
   </el-descriptions>
   <BaseChart :option="chartOption" height="380px" aria-label="时域或频域分析图" />
   <p class="section-note">频率分辨率 {{(mode==='welch'?welch.resolutionHz:1/(stats.n*samplePeriod)).toFixed(5)}} Hz <span v-if="mode==='welch'">· Welch 分段 {{welch.segments}} 组</span> · Nyquist 频率 {{(1/(2*samplePeriod)).toFixed(3)}} Hz。真实数据接入时必须校验均匀采样、时钟对齐、缺测与质量标记。</p>
- </div>
+ </el-card>
 </template>
 <style scoped>
 .signal-tools{display:flex;align-items:center;flex-wrap:wrap;gap:var(--app-space-3);margin:var(--app-space-3) 0}
