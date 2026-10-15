@@ -23,7 +23,7 @@ function resetDraft(){selection.value={...selection.value,[node.value.id]:node.v
 </script>
 
 <template>
-  <div class="panel-card panel pipeline-workbench">
+  <el-card shadow="never" class="panel-card panel pipeline-workbench">
     <div class="pipeline-header">
       <div><h2 class="app-panel-title">Controller 执行管线</h2><p class="section-note">按 v0_11 分层，点击节点检查算法、参数和输入输出。候选更改只保存在当前页面，不写入运行控制器。</p></div>
       <el-select v-model="functionId" aria-label="控制管线" style="width:160px">
@@ -65,7 +65,7 @@ function resetDraft(){selection.value={...selection.value,[node.value.id]:node.v
         </div>
       </section></el-col>
     </el-row>
-  </div>
+  </el-card>
 </template>
 
 <style scoped>
