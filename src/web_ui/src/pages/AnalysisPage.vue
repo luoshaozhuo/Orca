@@ -5,9 +5,20 @@ import SignalAnalysis from '../components/SignalAnalysis.vue'
 import { response, tests, reasons } from '../mock/data'
 import { controllerApi } from '../api/client'
 import { useResource } from '../composables/useControllerReadModel'
-import type { AssessmentResult, DiagnosticFinding, HistorySeries, IdentificationResult } from '../api/contracts'
+import type { AssessmentResult, DiagnosticFinding, HistorySeries, IdentificationResult, PerformanceResult } from '../api/contracts'
 const props = defineProps<{ mock: boolean }>()
 const analysisTab = ref('performance')
+const performance = useResource(controllerApi.performance)
+const performanceState = performance.state
+const performanceError = performance.error
+const performanceRows = computed(() => props.mock ? tests.map(item => ({...item, validity:'模拟', evidence:'—'})) :
+  (performance.data.value ?? []).map((item:PerformanceResult) => ({
+    id:item.id,algorithm:item.algorithm,
+    settle:item.validity==='VALID'?item.settlingTimeS:null,
+    overshoot:item.validity==='VALID'?item.overshootPercent:null,
+    error:item.validity==='VALID'?item.trackingErrorMW:null,
+    validity:item.validity,evidence:item.evidenceIds.join('、') || '—'
+  })))
 const assessments = useResource(controllerApi.assessments)
 const identifications = useResource(controllerApi.identifications)
 const diagnostics = useResource(controllerApi.diagnostics)
@@ -85,13 +96,18 @@ async function refreshHistory() {
               <el-alert v-if="!mock && historyState==='error'" type="error" :title="historyError ?? '历史数据接口失败'" :closable="false" />
               <el-empty v-else-if="!mock && !historyRows.length" description="无质量有效且时间对齐的历史响应数据" />
               <el-button v-if="!mock" :loading="historyState==='loading'" @click="refreshHistory">查询最近一小时历史</el-button>
-              <el-table :data="mock ? tests : []" stripe>
-                <el-table-column prop="id" label="试验" />
-                <el-table-column prop="algorithm" label="算法" />
-                <el-table-column prop="settle" label="调节时间 (s)" />
-                <el-table-column prop="overshoot" label="超调 (%)" />
-                <el-table-column prop="error" label="稳态误差 (MW)" />
+              <el-alert v-if="!mock && performanceState==='error'" type="error" :title="performanceError ?? '动态性能记录不可用'" :closable="false" />
+              <el-table v-if="performanceRows.length" :data="performanceRows" stripe>
+                <el-table-column prop="id" label="试验 ID" min-width="110" />
+                <el-table-column prop="algorithm" label="算法" min-width="110" />
+                <el-table-column prop="settle" label="调节时间 (s)" min-width="110" />
+                <el-table-column prop="overshoot" label="超调 (%)" min-width="95" />
+                <el-table-column prop="error" label="稳态误差 (MW)" min-width="120" />
+                <el-table-column prop="validity" label="数据有效性" min-width="100" />
+                <el-table-column prop="evidence" label="证据编号" min-width="130" />
               </el-table>
+              <el-empty v-else description="暂无证据有效的动态性能试验记录" />
+              <el-button v-if="!mock" :loading="performanceState==='loading'" @click="performance.refresh">读取性能记录</el-button>
             </el-card>
             <el-card shadow="never" v-else-if="analysisTab==='compliance'" class="panel-card panel">
               <h2 class="app-panel-title panel-title">标准符合性与试验证据</h2>
