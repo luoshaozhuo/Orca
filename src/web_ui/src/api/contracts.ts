@@ -89,6 +89,14 @@ export interface AuditEvent {
   commandId: string | null
   detail: string
 }
+/** Chart projection only; not a live Controller API DTO. */
+export interface PlotPoint {
+  time: string
+  target: number
+  actual: number
+  total: number
+  limit: number
+}
 export interface HistoryPoint {
   timestamp: string
   value: number | null
