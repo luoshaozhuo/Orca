@@ -38,11 +38,11 @@ const pipelineState = live.state
 const pipelineError = live.error
 
 const selection = ref<Record<string,string>>({})
-const draftAlgorithm = computed({get:()=>selection.value[node.value.id] ?? node.value.algorithm,set:value=>{selection.value={...selection.value,[node.value.id]:value}}})
+const draftAlgorithm = computed({get:()=>props.mock ? selection.value[node.value.id] ?? node.value.algorithm : node.value.algorithm,set:value=>{if(props.mock) selection.value={...selection.value,[node.value.id]:value}}})
 const candidates = ref<Record<string,Record<string,string>>>({})
-const draftParams = computed(()=>candidates.value[node.value.id] ?? node.value.parameters)
-function changeParameter(key:string,value:string) { candidates.value={...candidates.value,[node.value.id]:{...draftParams.value,[key]:value}} }
-function resetDraft(){selection.value={...selection.value,[node.value.id]:node.value.algorithm};candidates.value={...candidates.value,[node.value.id]:{...node.value.parameters}}}
+const draftParams = computed(()=>props.mock ? candidates.value[node.value.id] ?? node.value.parameters : node.value.parameters)
+function changeParameter(key:string,value:string) { if(props.mock) candidates.value={...candidates.value,[node.value.id]:{...draftParams.value,[key]:value}} }
+function resetDraft(){if(!props.mock)return;selection.value={...selection.value,[node.value.id]:node.value.algorithm};candidates.value={...candidates.value,[node.value.id]:{...node.value.parameters}}}
 </script>
 
 <template>
@@ -63,7 +63,7 @@ function resetDraft(){selection.value={...selection.value,[node.value.id]:node.v
         <button v-for="(item,index) in nodeRows" :key="item.id" type="button" class="pipeline-node"
                 :class="{'pipeline-node--active':selectedId===item.id}" @click="selectedId=item.id">
           <span class="pipeline-node__index">{{ index + 1 }}</span>
-          <span class="pipeline-node__body"><strong>{{ item.label }}</strong><small>{{ selection[item.id] ?? item.algorithm }}</small></span>
+          <span class="pipeline-node__body"><strong>{{ item.label }}</strong><small>{{ mock ? selection[item.id] ?? item.algorithm : item.algorithm }}</small></span>
           <span aria-hidden="true">›</span>
         </button>
       </div></el-col>
