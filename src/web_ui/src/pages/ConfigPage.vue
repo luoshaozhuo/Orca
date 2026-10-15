@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import { station, controls, units } from '../mock/data'
 import { controllerApi } from '../api/client'
 import { useResource, useStationReadModel } from '../composables/useControllerReadModel'
-import type { ControlFunction } from '../api/contracts'
+import type { ControlFunction, Measurement } from '../api/contracts'
 import { isUsableMeasurement } from '../api/quality'
 import { computed } from 'vue'
 defineProps<{ mock: boolean }>()
@@ -11,6 +11,9 @@ const selectedConfig = ref('station')
 const live = useStationReadModel()
 const configuration = useResource(controllerApi.configuration, 0)
 const configSnapshot = computed(() => configuration.data.value)
+function valueOrDash(value: Measurement | undefined): string {
+  return isUsableMeasurement(value) ? String(value.value) : '—'
+}
 const configState = configuration.state
 const configError = configuration.error
 const coordinationFields = computed(() => Object.entries(configSnapshot.value?.coordination ?? {}).map(([name,value]) => ({
@@ -50,7 +53,7 @@ async function validateConfig() {
                   <el-col :xs="24" :lg="14"><el-card shadow="never" class="panel-card panel">
                     <h2 class="app-panel-title panel-title">电厂与控制配置</h2>
                     <el-tabs>
-                      <el-tab-pane label="电厂参数"><el-descriptions v-if="mock || stationSnapshot" border :column="2"><el-descriptions-item label="电站名称">{{mock ? station.name : (configSnapshot?.station?.name ?? '—')}}</el-descriptions-item><el-descriptions-item label="额定容量">{{mock ? station.rated : (isUsableMeasurement(stationSnapshot?.ratedPower)?stationSnapshot.ratedPower.value:'—')}} MW</el-descriptions-item><el-descriptions-item label="控制周期">{{mock ? station.period : (isUsableMeasurement(stationSnapshot?.periodMs)?stationSnapshot.periodMs.value:'—')}} ms</el-descriptions-item><el-descriptions-item label="可调容量">{{mock ? station.available : (isUsableMeasurement(stationSnapshot?.availablePower)?stationSnapshot.availablePower.value:'—')}} MW</el-descriptions-item></el-descriptions><el-empty v-else description="并网点、额定容量、运行约束：后端配置接口待接入"/></el-tab-pane>
+                      <el-tab-pane label="电厂参数"><el-descriptions v-if="mock || stationSnapshot" border :column="2"><el-descriptions-item label="电站名称">{{mock ? station.name : (configSnapshot?.station?.name ?? '—')}}</el-descriptions-item><el-descriptions-item label="额定容量">{{mock ? station.rated : (valueOrDash(stationSnapshot?.ratedPower))}} MW</el-descriptions-item><el-descriptions-item label="控制周期">{{mock ? station.period : (valueOrDash(stationSnapshot?.periodMs))}} ms</el-descriptions-item><el-descriptions-item label="可调容量">{{mock ? station.available : (valueOrDash(stationSnapshot?.availablePower))}} MW</el-descriptions-item></el-descriptions><el-empty v-else description="并网点、额定容量、运行约束：后端配置接口待接入"/></el-tab-pane>
                       <el-tab-pane label="控制功能"><el-table v-if="mock || functionRows.length" :data="mock ? controls : functionRows"><el-table-column prop="name" label="控制功能"/><el-table-column prop="enabled" label="状态"/><el-table-column prop="algorithm" label="算法"/></el-table><el-empty v-else description="控制功能配置接口待接入"/></el-tab-pane>
                       <el-tab-pane label="协调策略"><el-descriptions v-if="mock" border><el-descriptions-item label="合成策略">default（模拟）</el-descriptions-item><el-descriptions-item label="IR 优先级">1</el-descriptions-item><el-descriptions-item label="PFR 优先级">2</el-descriptions-item><el-descriptions-item label="AGC 优先级">3</el-descriptions-item></el-descriptions><el-descriptions v-else-if="coordinationFields.length" border :column="1"><el-descriptions-item v-for="item in coordinationFields" :key="item.name" :label="item.name">{{item.value}}</el-descriptions-item></el-descriptions><el-empty v-else description="协调策略配置待接入"/></el-tab-pane>
                     </el-tabs>
