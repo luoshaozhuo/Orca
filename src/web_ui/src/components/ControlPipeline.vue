@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { usePipelineReadModel } from '../composables/useControllerReadModel'
+import { isUsableState } from '../api/quality'
 
 defineProps<{ mock: boolean }>()
 
@@ -19,8 +20,9 @@ const functionId = ref('active_power')
 const live = usePipelineReadModel(functionId)
 watch(functionId, () => { void live.refresh() })
 const pipelineSnapshot = computed(() => live.data.value)
+const pipelineUsable = computed(() => isUsableState(pipelineSnapshot.value))
 const nodeRows = computed<Node[]>(() => {
-  if (!pipelineSnapshot.value || pipelineSnapshot.value.quality !== 'GOOD' || !pipelineSnapshot.value.stages.length) return nodes
+  if (!pipelineSnapshot.value || !pipelineUsable.value || !pipelineSnapshot.value.stages.length) return nodes
   return pipelineSnapshot.value.stages.map(stage => ({
     id: stage.id, label: stage.label, algorithm: stage.algorithm ?? 'UNKNOWN',
     choices: [stage.algorithm ?? 'UNKNOWN'], inputs: stage.inputs.join(' / '),
@@ -52,7 +54,7 @@ function resetDraft(){selection.value={...selection.value,[node.value.id]:node.v
     </div>
     <el-alert v-if="mock" title="离线 Pipeline 示意：不执行控制器算法、不写入设备。" type="info" :closable="false" show-icon />
     <el-alert v-else-if="pipelineState==='error'" :title="pipelineError ?? 'Pipeline 接口不可达'" type="error" :closable="false" show-icon />
-    <el-alert v-else-if="!pipelineSnapshot || pipelineSnapshot.quality!=='GOOD'" title="实时 Pipeline 数据尚未可用，以下节点为结构参考，不代表运行状态。" type="warning" :closable="false" show-icon />
+    <el-alert v-else-if="!pipelineUsable" title="实时 Pipeline 数据尚未可用，以下节点为结构参考，不代表运行状态。" type="warning" :closable="false" show-icon />
     <el-alert v-else title="当前为实时 Pipeline 只读快照；候选算法与参数修改仅存于浏览器，不会写入控制器。" type="info" :closable="false" show-icon />
     <el-row :gutter="12" class="pipeline-layout">
       <el-col :xs="24" :lg="10"><div class="pipeline-nodes">
@@ -68,7 +70,7 @@ function resetDraft(){selection.value={...selection.value,[node.value.id]:node.v
         <el-descriptions :column="1" border size="small">
           <el-descriptions-item label="输入">{{ node.inputs }}</el-descriptions-item>
           <el-descriptions-item label="输出">{{ node.outputs }}</el-descriptions-item>
-          <el-descriptions-item label="执行状态">{{mock ? '模拟 · 非实际执行' : (pipelineSnapshot?.quality==='GOOD' ? '只读运行快照' : 'UNKNOWN')}}</el-descriptions-item>
+          <el-descriptions-item label="执行状态">{{mock ? '模拟 · 非实际执行' : (pipelineUsable ? '只读运行快照' : 'UNKNOWN')}}</el-descriptions-item>
         </el-descriptions>
         <el-form label-position="top" class="pipeline-form">
           <el-form-item label="候选算法（仅本地预览）">
