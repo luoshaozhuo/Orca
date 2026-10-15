@@ -47,7 +47,7 @@ const controlRows = computed(() => props.mock
 <template>
  <div>
 
-            <ControlPipeline />
+            <ControlPipeline :mock="mock" />
             <el-tabs v-model="selectedControl">
               <el-tab-pane label="全场控制" name="station"/>
               <el-tab-pane label="机组控制" name="units"/>
