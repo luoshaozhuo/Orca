@@ -98,6 +98,5 @@ const chartOption=computed<EChartsOption>(()=>{
 .signal-mode{min-width:0}
 .signal-mode :deep(.el-segmented){width:100%;max-width:100%;height:auto;flex-wrap:wrap}
 .signal-stats{margin-bottom:var(--app-space-3)}
-.signal-plot{width:100%;height:380px;min-width:0}
 
 </style>
