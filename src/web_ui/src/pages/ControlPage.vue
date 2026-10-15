@@ -38,7 +38,7 @@ const historyRows = computed(() => {
   const references = new Map(target.points.filter(point => point.quality === 'GOOD' && point.value !== null)
     .map(point => [point.timestamp, point.value!]))
   return actual.points.filter(point => point.quality === 'GOOD' && point.value !== null && references.has(point.timestamp))
-    .map(point => ({time:new Date(point.timestamp).toLocaleTimeString(),target:references.get(point.timestamp)!,
+    .map(point => ({time:point.timestamp,target:references.get(point.timestamp)!,
       actual:point.value!,total:point.value!,limit:0})).slice(-180)
 })
 const historyState = liveHistory.state
@@ -125,7 +125,7 @@ const controlRows = computed(() => props.mock
                     <el-tag type="info" effect="plain">{{mock ? '示意响应' : '质量有效的历史数据'}}</el-tag>
                   </div>
                   <ResponseChart v-if="mock || historyRows.length" :data="mock ? (selectedControl==='station'?response:unitResponse) : historyRows"
-                    :show-limit="mock" :title="selectedControl==='station'?'全场指令与实测响应':'机组指令与实测响应'"/>
+                    :show-limit="mock" :preview="mock" :title="selectedControl==='station'?'全场指令与实测响应':'机组指令与实测响应'"/>
                   <el-alert v-if="!mock && historyState==='error'" type="error" :title="historyError ?? '历史趋势不可用'" :closable="false" />
                   <el-empty v-else-if="!mock && !historyRows.length" description="当前无质量有效且时间对齐的历史响应" />
                   <p class="section-note">同一时轴展示指令时间、反馈数据时间及质量状态。可跳转调试页查看性能指标。</p>
