@@ -20,7 +20,7 @@ const live = usePipelineReadModel(functionId)
 watch(functionId, () => { void live.refresh() })
 const pipelineSnapshot = computed(() => live.data.value)
 const nodeRows = computed<Node[]>(() => {
-  if (!pipelineSnapshot.value || pipelineSnapshot.value.quality !== 'GOOD') return nodes
+  if (!pipelineSnapshot.value || pipelineSnapshot.value.quality !== 'GOOD' || !pipelineSnapshot.value.stages.length) return nodes
   return pipelineSnapshot.value.stages.map(stage => ({
     id: stage.id, label: stage.label, algorithm: stage.algorithm ?? 'UNKNOWN',
     choices: [stage.algorithm ?? 'UNKNOWN'], inputs: stage.inputs.join(' / '),
