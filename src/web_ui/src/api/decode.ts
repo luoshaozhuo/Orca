@@ -47,7 +47,8 @@ const isStation: Guard<StationSnapshot> = (value): value is StationSnapshot => {
     'periodMs','periodDeviationMs'].every(key => isMeasurement(value[key]))
 }
 const isControlFunction: Guard<ControlFunction> = (value): value is ControlFunction =>
-  isRecord(value) && isText(value.id) && isText(value.name) && isNullableBool(value.enabled) &&
+  isRecord(value) && isTimestamp(value.timestamp) && isQuality(value.quality) &&
+  isText(value.id) && isText(value.name) && isNullableBool(value.enabled) &&
   isText(value.responseState) && isNullableText(value.algorithm) &&
   isNullableNumber(value.uptimeSeconds) && isMeasurement(value.target) &&
   isMeasurement(value.actual) && isNullableText(value.constraint)
@@ -62,7 +63,8 @@ const isCapability: Guard<CapabilitySnapshot> = (value): value is CapabilitySnap
   isArrayOf(value.reasons,isCapabilityReason) && isTimestamp(value.timestamp)
 
 const isDevice: Guard<DeviceSnapshot> = (value): value is DeviceSnapshot =>
-  isRecord(value) && isText(value.id) && isText(value.type) &&
+  isRecord(value) && isTimestamp(value.timestamp) && isQuality(value.quality) &&
+  isText(value.id) && isText(value.type) &&
   isMeasurement(value.availablePower) && isMeasurement(value.activePower) &&
   isMeasurement(value.targetPower) && isNullableBool(value.participation) &&
   isText(value.status) && isNullableNumber(value.weight)
