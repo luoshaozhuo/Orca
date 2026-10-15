@@ -32,12 +32,15 @@ const functionRows = computed(() => (live.functions.data.value ?? []).map((item:
 const validationState = ref<'idle' | 'validating' | 'valid' | 'invalid' | 'error'>('idle')
 const validationDetail = ref('')
 const validatedRevision = ref<string | null>(null)
+let validationSequence = 0
 watch(() => configSnapshot.value?.revision, () => {
+  validationSequence++
   validationState.value = 'idle'
   validationDetail.value = ''
   validatedRevision.value = null
 })
 async function reloadConfiguration() {
+  validationSequence++
   validationState.value = 'idle'
   validationDetail.value = ''
   validatedRevision.value = null
@@ -45,10 +48,12 @@ async function reloadConfiguration() {
 }
 async function validateConfig() {
   if (!configSnapshot.value || validationState.value === 'validating') return
+  const requestId = ++validationSequence
   validationState.value = 'validating'
   try {
     const candidate = configSnapshot.value
     const result = await controllerApi.validateConfiguration(candidate)
+    if (requestId !== validationSequence) return
     if (configSnapshot.value?.revision !== candidate.revision) {
       validationState.value = 'idle'
       validationDetail.value = '配置版本已变化，请重新校验'
@@ -59,6 +64,7 @@ async function validateConfig() {
     validationDetail.value = result.valid ? '校验通过（尚未保存或应用）' :
       result.errors.map(item => `${item.path}: ${item.message}`).join('；')
   } catch (error) {
+    if (requestId !== validationSequence) return
     validationState.value = 'error'
     validationDetail.value = error instanceof Error ? error.message : '校验请求失败'
   }
