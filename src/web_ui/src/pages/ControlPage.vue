@@ -23,7 +23,7 @@ const sampledUnits = computed(() => units.filter(unit => unit.type === '风机')
               <el-col :xs="24" :lg="14"><div class="stack">
                 <el-card shadow="never" class="panel-card panel">
                   <h2 class="app-panel-title panel-title">{{selectedControl==='station'?'全场控制工作台':'机组控制工作台'}}</h2>
-                  <el-select v-if="selectedControl==='units'" v-model="selectedUnit" filterable style="width:220px"><el-option v-for="u in units" :key="u.id" :label="u.id+' · '+u.type" :value="u.id"/></el-select>
+                  <el-select v-if="selectedControl==='units'" v-model="selectedUnit" filterable><el-option v-for="u in units" :key="u.id" :label="u.id+' · '+u.type" :value="u.id"/></el-select>
                   <div class="status-row"><span>控制权与安全状态</span><el-tag :type="mock?'success':'info'">{{mock?'远方自动 · 演示':'待接入'}}</el-tag></div>
                   <div class="status-row"><span>当前参考 / 指令</span><b>{{mock?(selectedControl==='station'?'195.0 MW':activeUnit.target+' MW'):'—'}}</b></div>
                   <div class="status-row"><span>实际反馈</span><b>{{mock?(selectedControl==='station'?station.active+' MW':activeUnit.active+' MW'):'—'}}</b></div>
