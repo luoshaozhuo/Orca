@@ -21,6 +21,9 @@ const seriesMap: Record<Channel, string> = {
   actual: '实测有功', target: '目标有功', total: '设备合计有功'
 }
 const channel = ref<Channel>('actual')
+const channelOptions = computed(() => (Object.entries(seriesMap) as [Channel,string][]).map(([id,label]) => ({
+  id, label, disabled: !props.mock && !props.history.some(series => series.signalId === signalIds[id])
+})))
 const mode = ref<Mode>('time')
 const windowType = ref<'hann' | 'rectangular'>('hann')
 const removeMean = ref(true)
@@ -37,7 +40,7 @@ function historySamples(signal: Channel): Sample[] {
     .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp)).slice(-256)
 }
 const samples = computed<Sample[]>(() => props.mock
-  ? response.map((row, index) => ({ timestamp: row.time, value: row[channel.value] }))
+  ? response.map(row => ({ timestamp: row.time, value: row[channel.value] }))
   : historySamples(channel.value))
 
 /** Reject irregular samples and missing data rather than silently interpolating measurements. */
@@ -92,7 +95,7 @@ const welch = computed<WelchResult>(() => {
 const correlation = computed(() => {
   if (!sampling.value.valid) return []
   const targets = props.mock
-    ? response.map((row,index) => ({timestamp:row.time,value:row.target}))
+    ? response.map(row => ({timestamp:row.time,value:row.target}))
     : historySamples('target')
   const byTime = new Map(targets.map(point => [point.timestamp, point.value]))
   const pairs = samples.value.filter(point => byTime.has(point.timestamp))
@@ -163,8 +166,7 @@ function formatMetric(value: number | null): string {
     <el-row :gutter="12" class="signal-tools">
       <el-col :xs="24" :sm="12" :lg="6">
         <el-select v-model="channel" aria-label="分析信号">
-          <el-option v-for="(label,key) in seriesMap" :key="key" :label="label" :value="key"
-            :disabled="!mock && !history?.some(item=>item.signalId===signalIds[key as Channel])"/>
+          <el-option v-for="option in channelOptions" :key="option.id" :label="option.label" :value="option.id" :disabled="option.disabled"/>
         </el-select>
       </el-col>
       <el-col :xs="24" :lg="12" class="signal-mode">
