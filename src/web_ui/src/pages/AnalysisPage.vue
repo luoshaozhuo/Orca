@@ -1,10 +1,33 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import ResponseChart from '../components/ResponseChart.vue'
 import SignalAnalysis from '../components/SignalAnalysis.vue'
 import { response, tests, reasons } from '../mock/data'
+import { controllerApi } from '../api/client'
+import { useResource } from '../composables/useControllerReadModel'
+import type { HistorySeries } from '../api/contracts'
 defineProps<{ mock: boolean }>()
 const analysisTab = ref('performance')
+const fromTime = ref(new Date(Date.now() - 60 * 60 * 1000).toISOString())
+const toTime = ref(new Date().toISOString())
+const liveHistory = useResource<HistorySeries[]>(() => controllerApi.history(['station.active_power','station.active_power_target'], fromTime.value, toTime.value), 0)
+const historyRows = computed(() => {
+  const actual = liveHistory.data.value?.find(series => series.signalId === 'station.active_power')
+  const target = liveHistory.data.value?.find(series => series.signalId === 'station.active_power_target')
+  if (!actual || !target) return []
+  const targetMap = new Map(target.points.map(point => [point.timestamp, point]))
+  return actual.points.filter(point => point.quality === 'GOOD').map(point => {
+    const reference = targetMap.get(point.timestamp)
+    return {
+      time: point.timestamp,
+      target: reference?.quality === 'GOOD' ? reference.value ?? 0 : 0,
+      actual: point.value ?? 0,
+      total: point.value ?? 0,
+      limit: 0
+    }
+  }).filter(point => point.target !== 0 && point.actual !== 0)
+})
+
 </script>
 
 <template>
@@ -17,7 +40,10 @@ const analysisTab = ref('performance')
             </el-tabs>
             <el-card shadow="never" class="panel-card panel" v-if="analysisTab==='performance'">
               <h2 class="app-panel-title panel-title">动态性能与响应评价</h2>
-              <ResponseChart v-if="mock" :data="response" title="AGC 阶跃 · 目标 / 响应" />
+              <ResponseChart v-if="mock || historyRows.length" :data="mock ? response : historyRows" :title="mock ? 'AGC 阶跃 · 目标 / 响应（示意）' : '全场有功历史 · 目标 / 反馈'" />
+              <el-alert v-if="!mock && liveHistory.state==='error'" type="error" :title="liveHistory.error ?? '历史数据接口失败'" :closable="false" />
+              <el-empty v-else-if="!mock && !historyRows.length" description="无质量有效且时间对齐的历史响应数据" />
+              <el-button v-if="!mock" :loading="liveHistory.state==='loading'" @click="liveHistory.refresh">查询最近一小时历史</el-button>
               <el-table :data="mock ? tests : []" stripe>
                 <el-table-column prop="id" label="试验" />
                 <el-table-column prop="algorithm" label="算法" />
