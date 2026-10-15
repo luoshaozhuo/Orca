@@ -43,6 +43,10 @@ const isStation: Guard<StationSnapshot> = (value): value is StationSnapshot => {
       !isNullableText(value.version) || !isNullableText(value.mode) ||
       !isNullableText(value.authority) || !isNullableText(value.strategy)) return false
   if (value.targetPower !== undefined && !isMeasurement(value.targetPower)) return false
+  if (value.authorityGeneration !== undefined && !isNullableText(value.authorityGeneration)) return false
+  if (value.writeEnabled !== undefined && !isNullableBool(value.writeEnabled)) return false
+  if (value.safetyState !== undefined && value.safetyState !== 'READY' &&
+      value.safetyState !== 'BLOCKED' && value.safetyState !== 'UNKNOWN') return false
   return ['activePower','reactivePower','voltage','frequency','ratedPower','availablePower',
     'periodMs','periodDeviationMs'].every(key => isMeasurement(value[key]))
 }
