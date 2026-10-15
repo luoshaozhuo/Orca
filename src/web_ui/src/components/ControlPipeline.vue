@@ -20,7 +20,8 @@ const functionId = ref('active_power')
 const live = usePipelineReadModel(functionId)
 watch(functionId, () => { void live.refresh() })
 const pipelineSnapshot = computed(() => live.data.value)
-const pipelineUsable = computed(() => isUsableState(pipelineSnapshot.value) && (pipelineSnapshot.value?.stages.length ?? 0) > 0)
+const pipelineUsable = computed(() => isUsableState(pipelineSnapshot.value) && pipelineSnapshot.value?.functionId === functionId.value &&
+  (pipelineSnapshot.value?.stages.length ?? 0) > 0)
 const nodeRows = computed<Node[]>(() => {
   if (!pipelineSnapshot.value || !pipelineUsable.value) return props.mock ? nodes : []
   return pipelineSnapshot.value.stages.map(stage => ({
@@ -31,7 +32,8 @@ const nodeRows = computed<Node[]>(() => {
     constraints: `实时状态：${stage.status} · 当前快照只读`
   }))
 })
-const node = computed(() => nodeRows.value.find(n => n.id === selectedId.value) ?? nodeRows.value[0])
+const node = computed(() => nodeRows.value.find(n => n.id === selectedId.value) ?? nodeRows.value[0] ?? nodes[0])
+watch(nodeRows, items => { if (items.length && !items.some(item => item.id===selectedId.value)) selectedId.value=items[0].id })
 const pipelineState = live.state
 const pipelineError = live.error
 
