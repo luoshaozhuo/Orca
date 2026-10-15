@@ -6,6 +6,9 @@ import type { AuditEvent } from '../api/contracts'
 const props = defineProps<{ mock: boolean }>()
 const eventQuery = ref('')
 const eventResource = useEventReadModel()
+const eventState = eventResource.state
+const eventError = eventResource.error
+const eventData = eventResource.data
 const liveEvents = computed(() => (eventResource.data.value ?? []).map((event: AuditEvent) => ({
   time: event.timestamp, kind: event.kind, object: event.objectId, result: event.result,
   command: event.commandId ?? '—', detail: event.detail
@@ -25,8 +28,8 @@ const filteredEvents = computed(() => (props.mock ? events : liveEvents.value).f
                 <el-table-column prop="time" label="时间" min-width="175"/><el-table-column prop="kind" label="类型"/><el-table-column prop="object" label="对象"/>
                 <el-table-column prop="result" label="执行结果"/><el-table-column prop="command" label="关联指令 ID" min-width="180"/><el-table-column prop="detail" label="详情" min-width="240"/>
               </el-table>
-              <el-alert v-if="!mock && eventResource.state === 'error'" type="error" :title="eventResource.error ?? '事件接口失败'" :closable="false" />
-              <el-empty v-if="!mock && !eventResource.data?.length" description="事件数据未连接或暂不可用" />
+              <el-alert v-if="!mock && eventState === 'error'" type="error" :title="eventError ?? '事件接口失败'" :closable="false" />
+              <el-empty v-if="!mock && !eventData?.length" description="事件数据未连接或暂不可用" />
             </el-card>
 
  </div>
