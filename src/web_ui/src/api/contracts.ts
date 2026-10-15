@@ -134,6 +134,46 @@ export interface ConfigurationApplyReceipt {
   runtimeRevision: string | null
   reason: string | null
 }
+export interface PerformanceResult {
+  id: string
+  timestamp: string
+  functionId: string
+  algorithm: string
+  validity: 'VALID' | 'INVALID' | 'UNKNOWN'
+  settlingTimeS: number | null
+  overshootPercent: number | null
+  trackingErrorMW: number | null
+  evidenceIds: string[]
+}
+export interface AssessmentResult {
+  id: string
+  name: string
+  standard: string
+  criterion: string
+  status: 'PASS' | 'FAIL' | 'INDETERMINATE' | 'NOT_EVALUATED'
+  evaluatedAt: string | null
+  evidenceIds: string[]
+  detail: string
+}
+export interface IdentificationResult {
+  id: string
+  modelFamily: string
+  status: 'DRAFT' | 'VALIDATED' | 'REJECTED'
+  createdAt: string
+  validationSetId: string | null
+  fitScore: number | null
+  residualSummary: string
+  parameters: Record<string, number>
+}
+export interface DiagnosticFinding {
+  id: string
+  name: string
+  contribution: string
+  evidenceIds: string[]
+  timestamp: string
+  quality: DataQuality
+  detail: string
+}
 export interface OfflineExperiment {
   id: string
   createdAt: string
