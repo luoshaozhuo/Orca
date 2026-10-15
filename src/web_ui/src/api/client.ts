@@ -58,5 +58,8 @@ export const controllerApi = {
     request('/v1/configuration/validate',decodeController.validation, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config)
     }),
-  experiments: () => request('/v1/engineering/experiments',decodeController.experiments)
+  experiments: () => request('/v1/engineering/experiments',decodeController.experiments),
+  assessments: () => request('/v1/analysis/assessments',decodeController.assessments),
+  identifications: () => request('/v1/analysis/identifications',decodeController.identifications),
+  diagnostics: () => request('/v1/analysis/diagnostics',decodeController.diagnostics)
 }
