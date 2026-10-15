@@ -64,8 +64,10 @@ const chartOption = computed<EChartsOption>(() => {
       height: block + '%', containLabel: true
     })),
     xAxis: data.map((_, index) => ({
-      type: 'category' as const, gridIndex: index, boundaryGap: false,
-      data: timeline.value.map(time => props.mock ? time : new Date(time).toLocaleTimeString()),
+      type: props.mock ? 'category' as const : 'time' as const,
+      gridIndex: index,
+      boundaryGap: false,
+      ...(props.mock ? { data: timeline.value } : {}),
       axisLabel: { ...chartAxisText().axisLabel, show: index === count - 1 },
       name: index === count - 1 ? '时间' : '',
       nameTextStyle: chartAxisText().nameTextStyle
@@ -78,7 +80,8 @@ const chartOption = computed<EChartsOption>(() => {
     series: data.map((item, index) => ({
       name: item.name, type: 'line' as const, showSymbol: false,
       xAxisIndex: index, yAxisIndex: index,
-      data: item.series.map(value => value === null ? null : Number(value.toFixed(2)))
+      data: item.series.map((value, i) => value === null ? null : props.mock
+        ? Number(value.toFixed(2)) : [timeline.value[i], Number(value.toFixed(2))])
     }))
   }
 })
