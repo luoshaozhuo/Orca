@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import type { EChartsOption } from 'echarts'
 import BaseChart from './BaseChart.vue'
 import { chartVisuals, chartAxisText, chartLegendText, chartZoomText } from '../utils/chartTheme'
-import type { PlotPoint } from '../mock/data'
+import type { PlotPoint } from '../api/contracts'
 
 const props=withDefaults(defineProps<{
   data: PlotPoint[]
