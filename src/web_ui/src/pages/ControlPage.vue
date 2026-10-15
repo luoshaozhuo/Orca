@@ -6,7 +6,7 @@ import { station, controls, units, response, unitResponse } from '../mock/data'
 import { useEventReadModel, useResource, useStationReadModel } from '../composables/useControllerReadModel'
 import { controllerApi } from '../api/client'
 import type { HistorySeries, Measurement } from '../api/contracts'
-import { isUsableMeasurement, isUsableStation } from '../api/quality'
+import { isUsableMeasurement, isUsableStation, isUsableState } from '../api/quality'
 
 const props = defineProps<{ mock: boolean }>()
 const emit = defineEmits<{ navigate: [page: 'commissioning' | 'events'] }>()
@@ -49,13 +49,13 @@ const liveControls = computed(() => (live.functions.data.value ?? []).map(item =
   name: item.name,
   target: formatMeasurement(item.target),
   active: formatMeasurement(item.actual),
-  limit: item.constraint ?? '未知'
+  limit: isUsableState(item) ? item.constraint ?? '未知' : 'UNKNOWN'
 })))
 const liveUnits = computed(() => (live.devices.data.value ?? []).slice(0, 8).map(item => ({
   id: item.id,
   target: formatMeasurement(item.targetPower),
   active: formatMeasurement(item.activePower),
-  status: item.status
+  status: isUsableState(item) ? item.status : 'UNKNOWN'
 })))
 const availableUnits = computed(() => props.mock ? units.map(item => ({ id: item.id, type: item.type })) :
   (live.devices.data.value ?? []).map(item => ({ id: item.id, type: item.type })))
