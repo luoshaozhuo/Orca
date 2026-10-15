@@ -1,4 +1,4 @@
-import type { Measurement, StationSnapshot } from './contracts'
+import type { DataQuality, Measurement, StationSnapshot } from './contracts'
 
 const parsedAge = Number(import.meta.env.VITE_LIVE_MAX_AGE_MS ?? 5000)
 const maxAgeMs = Number.isFinite(parsedAge) && parsedAge > 0 ? parsedAge : 5000
@@ -23,4 +23,8 @@ export function isUsableStation(snapshot: StationSnapshot | null | undefined): s
   return snapshot != null &&
     snapshot.quality === 'GOOD' &&
     isFreshTimestamp(snapshot.timestamp)
+}
+
+export function isUsableState(state: {timestamp: string; quality: DataQuality} | null | undefined): boolean {
+  return state?.quality === 'GOOD' && isFreshTimestamp(state.timestamp)
 }
