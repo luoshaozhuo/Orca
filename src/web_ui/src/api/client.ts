@@ -59,6 +59,7 @@ export const controllerApi = {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config)
     }),
   experiments: () => request('/v1/engineering/experiments',decodeController.experiments),
+  performance: () => request('/v1/analysis/performance',decodeController.performance),
   assessments: () => request('/v1/analysis/assessments',decodeController.assessments),
   identifications: () => request('/v1/analysis/identifications',decodeController.identifications),
   diagnostics: () => request('/v1/analysis/diagnostics',decodeController.diagnostics)
