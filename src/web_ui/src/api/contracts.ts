@@ -27,6 +27,7 @@ export interface StationSnapshot {
   authority: string | null
   strategy: string | null
   activePower: Measurement
+  targetPower?: Measurement
   reactivePower: Measurement
   voltage: Measurement
   frequency: Measurement
