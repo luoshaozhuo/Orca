@@ -7,7 +7,7 @@ import { station, controls } from '../mock/data'
 import { useResource, useStationReadModel } from '../composables/useControllerReadModel'
 import { controllerApi } from '../api/client'
 import type { CapabilitySnapshot, HistorySeries, Measurement } from '../api/contracts'
-import { isUsableMeasurement } from '../api/quality'
+import { isUsableMeasurement, isUsableState } from '../api/quality'
 
 type Health = 'healthy' | 'unavailable' | 'unknown'
 type Service = { id: string; name: string; url: string; state: Health; detail: string; checkedAt?: string }
@@ -26,8 +26,9 @@ function display(value: Measurement | undefined, digits: number): string {
     ? value.value.toFixed(digits) : '—'
 }
 const liveFunctions = computed(() => (live.functions.data.value ?? []).map(f => ({
- name:f.name, enabled:f.enabled === null?'未知':f.enabled?'已投入':'已退出', response:f.responseState,
- algorithm:f.algorithm ?? '—', uptime:f.uptimeSeconds === null?'—':`${Math.round(f.uptimeSeconds/60)} min`
+ name:f.name, enabled:!isUsableState(f)||f.enabled===null?'未知':f.enabled?'已投入':'已退出',
+ response:isUsableState(f)?f.responseState:'UNKNOWN',
+ algorithm:isUsableState(f)?f.algorithm ?? '—':'—', uptime:isUsableState(f)&&f.uptimeSeconds!==null?`${Math.round(f.uptimeSeconds/60)} min`:'—'
 })))
 const renderedCapabilities = computed<CapabilityMetric[]>(() => props.mock ? capabilityMetrics :
   (live.capabilities.data.value ?? []).map((capability: CapabilitySnapshot) => ({
