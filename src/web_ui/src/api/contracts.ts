@@ -152,6 +152,7 @@ export interface PipelineStage {
   status: 'READY' | 'BLOCKED' | 'UNKNOWN'
 }
 export interface PipelineSnapshot {
+  functionId: string
   timestamp: string
   quality: DataQuality
   stages: PipelineStage[]
