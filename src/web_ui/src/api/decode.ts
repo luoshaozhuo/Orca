@@ -1,7 +1,7 @@
 import type {
-  AuditEvent, CapabilityReason, CapabilitySnapshot, CommandAudit, ConfigValidation,
-  ControllerConfiguration, ControlFunction, DataQuality, DeviceSnapshot, ExecutionState,
-  HistoryPoint, HistorySeries, Measurement, OfflineExperiment, PipelineSnapshot,
+  AuditEvent, AssessmentResult, CapabilityReason, CapabilitySnapshot, CommandAudit, ConfigValidation,
+  ControllerConfiguration, ControlFunction, DataQuality, DeviceSnapshot, DiagnosticFinding, ExecutionState,
+  HistoryPoint, HistorySeries, IdentificationResult, Measurement, OfflineExperiment, PipelineSnapshot,
   PipelineStage, RuntimeInfo, StationSnapshot
 } from './contracts'
 
@@ -95,6 +95,29 @@ const isConfigValidation: Guard<ConfigValidation> = (value): value is ConfigVali
   isArrayOf(value.errors, (error: unknown): error is {path:string;message:string} =>
     isRecord(error) && isText(error.path) && isText(error.message))
 
+const isAssessment: Guard<AssessmentResult> = (value): value is AssessmentResult => {
+  if (!isRecord(value) || !isText(value.id) || !isText(value.name) ||
+    !isText(value.standard) || !isText(value.criterion) || !isText(value.detail) ||
+    !isNullableTimestamp(value.evaluatedAt) || !isArrayOf(value.evidenceIds,isText)) return false
+  if (value.status !== 'PASS' && value.status !== 'FAIL' &&
+    value.status !== 'INDETERMINATE' && value.status !== 'NOT_EVALUATED') return false
+  // A pass/fail decision without an evaluation timestamp and evidence is not trustworthy.
+  return (value.status !== 'PASS' && value.status !== 'FAIL') ||
+    (value.evaluatedAt !== null && value.evidenceIds.length > 0)
+}
+
+const isIdentification: Guard<IdentificationResult> = (value): value is IdentificationResult =>
+  isRecord(value) && isText(value.id) && isText(value.modelFamily) &&
+  (value.status === 'DRAFT' || value.status === 'VALIDATED' || value.status === 'REJECTED') &&
+  isTimestamp(value.createdAt) && isNullableText(value.validationSetId) &&
+  isNullableNumber(value.fitScore) && isText(value.residualSummary) &&
+  isRecord(value.parameters) && Object.values(value.parameters).every(isFiniteNumber)
+
+const isDiagnostic: Guard<DiagnosticFinding> = (value): value is DiagnosticFinding =>
+  isRecord(value) && isText(value.id) && isText(value.name) &&
+  isText(value.contribution) && isArrayOf(value.evidenceIds,isText) &&
+  isTimestamp(value.timestamp) && isQuality(value.quality) && isText(value.detail)
+
 const isOfflineExperiment: Guard<OfflineExperiment> = (value): value is OfflineExperiment =>
   isRecord(value) && isText(value.id) && isTimestamp(value.createdAt) &&
   isText(value.algorithmId) && isRecord(value.parameters) &&
@@ -139,5 +162,8 @@ export const decodeController = {
   validation: (value: unknown) => decode(value,isConfigValidation,'配置校验'),
   experiments: (value: unknown) => decode(value,arrayOf(isOfflineExperiment),'离线试验'),
   pipeline: (value: unknown) => decode(value,isPipeline,'Pipeline 快照'),
-  commandAudit: (value: unknown) => decode(value,isCommandAudit,'指令审计')
+  commandAudit: (value: unknown) => decode(value,isCommandAudit,'指令审计'),
+  assessments: (value: unknown) => decode(value,arrayOf(isAssessment),'标准评价'),
+  identifications: (value: unknown) => decode(value,arrayOf(isIdentification),'系统辨识'),
+  diagnostics: (value: unknown) => decode(value,arrayOf(isDiagnostic),'候选诊断')
 }
