@@ -9,8 +9,8 @@ import AnalysisPage from './pages/AnalysisPage.vue'
 import { controllerApi, isApiConfigured } from './api/client'
 import { useResource } from './composables/useControllerReadModel'
 type Page = 'overview' | 'control' | 'analysis' | 'config' | 'commissioning' | 'events'
-type Health = 'healthy' | 'unavailable' | 'unknown'
-type Service = { id: string; name: string; url: string; state: Health; detail: string; checkedAt?: string }
+import type { HealthState } from './api/contracts'
+type Service = { id: string; name: string; url: string; state: HealthState; detail: string; checkedAt?: string }
 const page = ref<Page>('overview')
 const names: Record<Page,string> = {
   overview:'运行总览',control:'控制工作台',analysis:'分析与评估',config:'配置管理',
