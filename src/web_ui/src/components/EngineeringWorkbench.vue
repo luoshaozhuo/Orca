@@ -70,7 +70,7 @@ const chartOption=computed<EChartsOption>(()=>{
 <template>
   <div class="engineering-stack">
     <el-alert title="离线设计沙箱 · 下方响应数据由简化示意模型生成，不代表 Controller 实际控制性能或标准验收结果。所有操作均不写设备。" type="info" :closable="false" show-icon />
-    <div class="panel-card panel">
+    <el-card shadow="never" class="panel-card panel">
       <h2 class="app-panel-title panel-title">试验工况与控制律</h2>
       <el-form label-position="top" class="engineering-form"><el-row :gutter="12" style="width:100%">
         <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="控制功能"><el-select v-model="functionId"><el-option v-for="f in ['AGC','AVC','PFR','IR','VR']" :key="f" :label="f" :value="f"/></el-select></el-form-item></el-col>
@@ -83,9 +83,9 @@ const chartOption=computed<EChartsOption>(()=>{
         <el-col :xs="24" :sm="12" :lg="8" :xl="6"><el-form-item label="链路延时 (s)"><el-input-number v-model="latency" :min="0" :max="30" :step="0.1" :precision="1"/></el-form-item></el-col>
       </el-row></el-form>
       <el-button type="primary" @click="addBaseline">加入方案对比（本地）</el-button>
-    </div>
+    </el-card>
     <el-row :gutter="12">
-      <el-col :xs="24" :lg="12"><div class="panel-card panel engineering-panel">
+      <el-col :xs="24" :lg="12"><el-card shadow="never" class="panel-card panel engineering-panel">
         <h2 class="app-panel-title panel-title">Pipeline 离线断点检查</h2>
         <el-select v-model="breakpoint" aria-label="停止节点" style="width:100%">
           <el-option v-for="s in stages" :key="s.id" :label="s.name" :value="s.id"/>
@@ -103,8 +103,8 @@ const chartOption=computed<EChartsOption>(()=>{
           <el-button :disabled="!canRunToBreakpoint" @click="cursor=breakpointIndex">运行至断点</el-button>
         </div>
         <p class="section-note">仅离线节点游标演示，不执行实际 Controller 算法；目标断点必须位于当前节点之后。实时控制循环禁止断点暂停。</p>
-      </div></el-col>
-      <el-col :xs="24" :lg="12"><div class="panel-card panel engineering-panel">
+      </el-card></el-col>
+      <el-col :xs="24" :lg="12"><el-card shadow="never" class="panel-card panel engineering-panel">
         <h2 class="app-panel-title panel-title">参数扫描与方案比较</h2>
         <el-form label-position="top" class="engineering-form">
           <el-row :gutter="12" style="width:100%">
@@ -114,9 +114,9 @@ const chartOption=computed<EChartsOption>(()=>{
         </el-row></el-form>
         <el-button :disabled="endKp<startKp" @click="scanParameters">执行示意参数扫描</el-button>
         <BaseChart :option="chartOption" height="290px" aria-label="候选参数扫描的调节时间和超调量趋势" />
-      </div></el-col>
+      </el-card></el-col>
     </el-row>
-    <div class="panel-card panel">
+    <el-card shadow="never" class="panel-card panel">
       <h2 class="app-panel-title panel-title">候选方案 A/B 比较</h2>
       <el-table :data="comparison" stripe>
         <el-table-column prop="id" label="方案" min-width="125"/>
@@ -128,7 +128,7 @@ const chartOption=computed<EChartsOption>(()=>{
         <el-table-column prop="error" label="稳态偏差 (MW)"/>
       </el-table>
       <p class="section-note">比较结果只用于演示操作流程，不用于调参决策或验收。生产发布必须另经合法性、仿真、联锁和授权审批。</p>
-    </div>
+    </el-card>
   </div>
 </template>
 
