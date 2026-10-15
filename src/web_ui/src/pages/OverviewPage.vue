@@ -6,11 +6,10 @@ import { capabilityMetrics, type CapabilityMetric } from '../mock/capabilities'
 import { station, controls } from '../mock/data'
 import { useResource, useStationReadModel } from '../composables/useControllerReadModel'
 import { controllerApi } from '../api/client'
-import type { CapabilitySnapshot, HistorySeries, Measurement } from '../api/contracts'
+import type { CapabilitySnapshot, HealthState, HistorySeries, Measurement } from '../api/contracts'
 import { isFreshTimestamp, isUsableMeasurement, isUsableState } from '../api/quality'
 
-type Health = 'healthy' | 'unavailable' | 'unknown'
-type Service = { id: string; name: string; url: string; state: Health; detail: string; checkedAt?: string }
+type Service = { id: string; name: string; url: string; state: HealthState; detail: string; checkedAt?: string }
 const props = defineProps<{ mock: boolean; services: Service[] }>()
 const live = useStationReadModel()
 const stationSnapshot = computed(() => live.station.data.value)
@@ -55,7 +54,7 @@ const selectedMetric = computed(() => renderedCapabilities.value.find(metric => 
 const metricDrawerOpen = ref(false)
 const openMetric = (metric: CapabilityMetric) => { selectedMetricId.value = metric.id; metricDrawerOpen.value = true }
 watch(selectedMetric, current => { if (!current) metricDrawerOpen.value = false })
-const statusLabel = (state: Health) => state === 'healthy' ? '可达' : state === 'unavailable' ? '不可达' : '未检测'
+const statusLabel = (state: HealthState) => state === 'healthy' ? '可达' : state === 'unavailable' ? '不可达' : '未检测'
 const statusType = (state: Health) => state === 'healthy' ? 'success' : state === 'unavailable' ? 'danger' : 'info'
 </script>
 <template>
