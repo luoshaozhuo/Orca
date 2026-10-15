@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { station, controls, units } from '../mock/data'
 import { controllerApi } from '../api/client'
 import { useResource, useStationReadModel } from '../composables/useControllerReadModel'
 import type { ControlFunction, Measurement } from '../api/contracts'
 import { isUsableMeasurement, isUsableState } from '../api/quality'
-import { computed } from 'vue'
 defineProps<{ mock: boolean }>()
 const selectedConfig = ref('station')
 const live = useStationReadModel()
@@ -32,12 +31,31 @@ const functionRows = computed(() => (live.functions.data.value ?? []).map((item:
 })))
 const validationState = ref<'idle' | 'validating' | 'valid' | 'invalid' | 'error'>('idle')
 const validationDetail = ref('')
+const validatedRevision = ref<string | null>(null)
+watch(() => configSnapshot.value?.revision, () => {
+  validationState.value = 'idle'
+  validationDetail.value = ''
+  validatedRevision.value = null
+})
+async function reloadConfiguration() {
+  validationState.value = 'idle'
+  validationDetail.value = ''
+  validatedRevision.value = null
+  await configuration.refresh()
+}
 async function validateConfig() {
   if (!configSnapshot.value || validationState.value === 'validating') return
   validationState.value = 'validating'
   try {
-    const result = await controllerApi.validateConfiguration(configSnapshot.value)
+    const candidate = configSnapshot.value
+    const result = await controllerApi.validateConfiguration(candidate)
+    if (configSnapshot.value?.revision !== candidate.revision) {
+      validationState.value = 'idle'
+      validationDetail.value = '配置版本已变化，请重新校验'
+      return
+    }
     validationState.value = result.valid ? 'valid' : 'invalid'
+    validatedRevision.value = result.valid ? candidate.revision : null
     validationDetail.value = result.valid ? '校验通过（尚未保存或应用）' :
       result.errors.map(item => `${item.path}: ${item.message}`).join('；')
   } catch (error) {
@@ -65,8 +83,11 @@ async function validateConfig() {
                     <div class="status-row"><span>Commander gRPC</span><el-tag type="info">待配置</el-tag></div>
                     <div class="status-row"><span>消息中间件及订阅</span><el-tag type="info">待配置</el-tag></div>
                     <div class="status-row"><span>配置版本及生效状态</span><b>{{mock?station.version+' · 生效中':(configSnapshot?.version ?? '—')}}</b></div>
+                    <el-steps :active="validatedRevision && configSnapshot?.revision===validatedRevision ? 2 : configSnapshot ? 1 : 0" finish-status="success" simple>
+                      <el-step title="加载配置" /><el-step title="校验配置" /><el-step title="保存草稿（未开放）" /><el-step title="应用发布（未开放）" />
+                    </el-steps>
                     <div class="toolbar" >
-                      <el-button :disabled="mock || configState==='loading'" @click="configuration.refresh">重新加载</el-button>
+                      <el-button :disabled="mock || configState==='loading'" @click="reloadConfiguration">重新加载</el-button>
                       <el-button disabled>导入配置（未开放）</el-button><el-button disabled>导出配置（未开放）</el-button>
                       <el-button type="primary" :disabled="mock || !configSnapshot || validationState==='validating'" @click="validateConfig">仅校验配置</el-button>
                       <el-button disabled>应用配置（未开放）</el-button>
