@@ -6,6 +6,7 @@ import EventsPage from './pages/EventsPage.vue'
 import ControlPage from './pages/ControlPage.vue'
 import EngineeringPage from './pages/EngineeringPage.vue'
 import AnalysisPage from './pages/AnalysisPage.vue'
+import { isApiConfigured } from './api/client'
 type Page = 'overview' | 'control' | 'analysis' | 'config' | 'commissioning' | 'events'
 type Health = 'healthy' | 'unavailable' | 'unknown'
 type Service = { id: string; name: string; url: string; state: Health; detail: string; checkedAt?: string }
@@ -28,7 +29,7 @@ const menu = [
 const mobile = ref(false)
 const drawer = ref(false)
 const showDetails = ref(false)
-const mock = ref(true)
+const mock = ref(!isApiConfigured())
 const errors = computed(() => services.value.filter(s => s.state === 'unavailable'))
 function navigate(key:string){page.value=key as Page;drawer.value=false}
 let timer: ReturnType<typeof setInterval> | undefined
