@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { usePipelineReadModel } from '../composables/useControllerReadModel'
+
+defineProps<{ mock: boolean }>()
 
 type Node = { id: string; label: string; algorithm: string; choices: string[]; inputs: string; outputs: string; parameters: Record<string, string>; constraints: string }
 const nodes: Node[] = [
@@ -12,8 +15,24 @@ const nodes: Node[] = [
   { id:'guard',label:'执行保护',algorithm:'FIXED_GUARD',choices:['FIXED_GUARD'],inputs:'计划 / 写权 / 控制代际 / 点元数据',outputs:'ControlOutcome',parameters:{writes_enabled:'false',retry_unknown_commands:'false'},constraints:'不可绕过；UNKNOWN 不自动重传；每条指令执行前校验控制权' }
 ]
 const selectedId = ref('law')
-const node = computed(() => nodes.find(n => n.id === selectedId.value) ?? nodes[0])
 const functionId = ref('active_power')
+const live = usePipelineReadModel(functionId)
+watch(functionId, () => { void live.refresh() })
+const pipelineSnapshot = computed(() => live.data.value)
+const nodeRows = computed<Node[]>(() => {
+  if (!pipelineSnapshot.value || pipelineSnapshot.value.quality !== 'GOOD') return nodes
+  return pipelineSnapshot.value.stages.map(stage => ({
+    id: stage.id, label: stage.label, algorithm: stage.algorithm ?? 'UNKNOWN',
+    choices: [stage.algorithm ?? 'UNKNOWN'], inputs: stage.inputs.join(' / '),
+    outputs: stage.outputs.join(' / '),
+    parameters: Object.fromEntries(Object.entries(stage.parameters).map(([k,v]) => [k,String(v)])),
+    constraints: `实时状态：${stage.status} · 当前快照只读`
+  }))
+})
+const node = computed(() => nodeRows.value.find(n => n.id === selectedId.value) ?? nodeRows.value[0])
+const pipelineState = live.state
+const pipelineError = live.error
+
 const selection = ref<Record<string,string>>({})
 const draftAlgorithm = computed({get:()=>selection.value[node.value.id] ?? node.value.algorithm,set:value=>{selection.value={...selection.value,[node.value.id]:value}}})
 const candidates = ref<Record<string,Record<string,string>>>({})
@@ -31,10 +50,13 @@ function resetDraft(){selection.value={...selection.value,[node.value.id]:node.v
         <el-option label="无功 Q" value="reactive_power" />
       </el-select>
     </div>
-    <el-alert title="无写入工程预览：节点不可暂停在线闭环；断点和单步仅允许离线回放或仿真。" type="info" :closable="false" show-icon />
+    <el-alert v-if="mock" title="离线 Pipeline 示意：不执行控制器算法、不写入设备。" type="info" :closable="false" show-icon />
+    <el-alert v-else-if="pipelineState==='error'" :title="pipelineError ?? 'Pipeline 接口不可达'" type="error" :closable="false" show-icon />
+    <el-alert v-else-if="!pipelineSnapshot || pipelineSnapshot.quality!=='GOOD'" title="实时 Pipeline 数据尚未可用，以下节点为结构参考，不代表运行状态。" type="warning" :closable="false" show-icon />
+    <el-alert v-else title="当前为实时 Pipeline 只读快照；候选算法与参数修改仅存于浏览器，不会写入控制器。" type="info" :closable="false" show-icon />
     <el-row :gutter="12" class="pipeline-layout">
       <el-col :xs="24" :lg="10"><div class="pipeline-nodes">
-        <button v-for="(item,index) in nodes" :key="item.id" type="button" class="pipeline-node"
+        <button v-for="(item,index) in nodeRows" :key="item.id" type="button" class="pipeline-node"
                 :class="{'pipeline-node--active':selectedId===item.id}" @click="selectedId=item.id">
           <span class="pipeline-node__index">{{ index + 1 }}</span>
           <span class="pipeline-node__body"><strong>{{ item.label }}</strong><small>{{ selection[item.id] ?? item.algorithm }}</small></span>
@@ -46,21 +68,21 @@ function resetDraft(){selection.value={...selection.value,[node.value.id]:node.v
         <el-descriptions :column="1" border size="small">
           <el-descriptions-item label="输入">{{ node.inputs }}</el-descriptions-item>
           <el-descriptions-item label="输出">{{ node.outputs }}</el-descriptions-item>
-          <el-descriptions-item label="执行状态">模拟 · 未接入 Controller 运行快照</el-descriptions-item>
+          <el-descriptions-item label="执行状态">{{mock ? '模拟 · 非实际执行' : (pipelineSnapshot?.quality==='GOOD' ? '只读运行快照' : 'UNKNOWN')}}</el-descriptions-item>
         </el-descriptions>
         <el-form label-position="top" class="pipeline-form">
           <el-form-item label="候选算法（仅本地预览）">
-            <el-select v-model="draftAlgorithm" :disabled="node.id==='guard'">
+            <el-select v-model="draftAlgorithm" :disabled="node.id==='guard' || !mock">
               <el-option v-for="item in node.choices" :key="item" :label="item" :value="item" />
             </el-select>
           </el-form-item>
           <el-form-item v-for="(value,key) in draftParams" :key="key" :label="String(key)">
-            <el-input :model-value="value" :disabled="node.id==='guard'" @update:model-value="changeParameter(String(key),$event)" />
+            <el-input :model-value="value" :disabled="node.id==='guard' || !mock" @update:model-value="changeParameter(String(key),$event)" />
           </el-form-item>
         </el-form>
         <el-alert :title="node.constraints" type="warning" :closable="false" />
         <div class="pipeline-actions">
-          <el-button @click="resetDraft">重置候选更改</el-button>
+          <el-button :disabled="!mock" @click="resetDraft">重置候选更改</el-button>
           <el-button type="primary" disabled>应用到 Controller（未接入）</el-button>
         </div>
       </section></el-col>
