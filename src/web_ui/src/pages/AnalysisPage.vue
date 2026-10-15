@@ -55,7 +55,7 @@ const historyRows = computed(() => {
     .map(point => [point.timestamp, point.value as number]))
   return actual.points.filter(point => point.quality === 'GOOD' && point.value !== null && targets.has(point.timestamp))
     .map(point => ({
-      time: new Date(point.timestamp).toLocaleTimeString(),
+      time: point.timestamp,
       target: targets.get(point.timestamp)!,
       actual: point.value!,
       total: point.value!,
@@ -81,7 +81,7 @@ async function refreshHistory() {
             </el-tabs>
             <el-card shadow="never" class="panel-card panel" v-if="analysisTab==='performance'">
               <h2 class="app-panel-title panel-title">动态性能与响应评价</h2>
-              <ResponseChart v-if="mock || historyRows.length" :data="mock ? response : historyRows" :show-limit="mock" :title="mock ? 'AGC 阶跃 · 目标 / 响应（示意）' : '全场有功历史 · 目标 / 反馈'" />
+              <ResponseChart v-if="mock || historyRows.length" :data="mock ? response : historyRows" :show-limit="mock" :preview="mock" :title="mock ? 'AGC 阶跃 · 目标 / 响应（示意）' : '全场有功历史 · 目标 / 反馈'" />
               <el-alert v-if="!mock && historyState==='error'" type="error" :title="historyError ?? '历史数据接口失败'" :closable="false" />
               <el-empty v-else-if="!mock && !historyRows.length" description="无质量有效且时间对齐的历史响应数据" />
               <el-button v-if="!mock" :loading="historyState==='loading'" @click="refreshHistory">查询最近一小时历史</el-button>
