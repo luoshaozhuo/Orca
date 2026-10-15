@@ -90,7 +90,21 @@ const controlRows = computed(() => props.mock
                 <el-card shadow="never" class="panel-card panel">
                   <h2 class="app-panel-title panel-title">{{selectedControl==='station'?'全场控制工作台':'机组控制工作台'}}</h2>
                   <el-select v-if="selectedControl==='units'" v-model="selectedUnit" filterable><el-option v-for="u in availableUnits" :key="u.id" :label="u.id+' · '+u.type" :value="u.id"/></el-select>
-                  <div class="status-row"><span>控制权与安全状态</span><el-tag :type="mock?'success':'info'">{{mock?'远方自动 · 演示':(isUsableStation(liveStation) ? liveStation.authority ?? '未知':'未知')}}</el-tag></div>
+                  <div class="status-row"><span>当前控制权</span>
+                    <el-tag type="info">{{mock?'远方自动 · 示意':(isUsableStation(liveStation) ? liveStation.authority ?? '未知':'未知')}}</el-tag>
+                  </div>
+                  <div class="status-row"><span>执行安全状态</span>
+                    <el-tag :type="!mock && isUsableStation(liveStation) && liveStation.safetyState==='BLOCKED' ? 'danger' : 'info'">
+                      {{mock?'离线示意 · 不可写':isUsableStation(liveStation) ? liveStation.safetyState ?? 'UNKNOWN' : 'UNKNOWN'}}
+                    </el-tag>
+                  </div>
+                  <div class="status-row"><span>写入许可</span><b>
+                    {{mock?'关闭':isUsableStation(liveStation) ?
+                      liveStation.writeEnabled===true?'后端允许 · UI 只读':liveStation.writeEnabled===false?'关闭':'未知':'未知'}}
+                  </b></div>
+                  <div class="status-row"><span>控制权代际</span><b>
+                    {{mock?'—':isUsableStation(liveStation) ? liveStation.authorityGeneration ?? '—':'—'}}
+                  </b></div>
                   <div class="status-row"><span>当前参考 / 指令</span><b>{{currentTarget}}</b></div>
                   <div class="status-row"><span>实际反馈</span><b>{{currentActual}}</b></div>
                   <div class="status-row"><span>最近执行结果</span><b>{{mock?'成功 · 14:41:12':recentExecution}}</b></div>
