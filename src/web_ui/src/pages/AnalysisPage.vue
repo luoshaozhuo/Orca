@@ -52,7 +52,9 @@ const diagnosticRows = computed(() => props.mock ? reasons :
     detail:item.detail
   }))
 )
-const fromTime = ref(new Date(Date.now() - 60 * 60 * 1000).toISOString())
+const historyRange = ref<[Date, Date]>([new Date(Date.now() - 3600000), new Date()])
+const historyQueryError = ref<string | null>(null)
+const fromTime = ref(historyRange.value[0].toISOString())
 const toTime = ref(historyRange.value[1].toISOString())
 const liveHistory = useResource<HistorySeries[]>(() => controllerApi.history(['station.active_power','station.active_power_target','station.devices_total_active_power'], fromTime.value, toTime.value), 0)
 const historyState = liveHistory.state
