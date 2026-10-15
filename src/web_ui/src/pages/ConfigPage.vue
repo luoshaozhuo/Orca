@@ -4,7 +4,7 @@ import { station, controls, units } from '../mock/data'
 import { controllerApi } from '../api/client'
 import { useResource, useStationReadModel } from '../composables/useControllerReadModel'
 import type { ControlFunction, Measurement } from '../api/contracts'
-import { isUsableMeasurement } from '../api/quality'
+import { isUsableMeasurement, isUsableState } from '../api/quality'
 import { computed } from 'vue'
 defineProps<{ mock: boolean }>()
 const selectedConfig = ref('station')
@@ -22,11 +22,13 @@ const coordinationFields = computed(() => Object.entries(configSnapshot.value?.c
 const stationSnapshot = computed(() => live.station.data.value)
 const deviceRows = computed(() => (live.devices.data.value ?? []).map(device => ({
   id: device.id, type: device.type, available: isUsableMeasurement(device.availablePower) ? device.availablePower.value : null,
-  enabled: device.participation, status: device.status, weight: device.weight
+  enabled: isUsableState(device) ? device.participation : null,
+  status: isUsableState(device) ? device.status : 'UNKNOWN',
+  weight: isUsableState(device) ? device.weight : null
 })))
 const functionRows = computed(() => (live.functions.data.value ?? []).map((item: ControlFunction) => ({
-  name: item.name, enabled: item.enabled === null ? '未知' : item.enabled ? '已投入' : '已退出',
-  algorithm: item.algorithm ?? '—'
+  name: item.name, enabled: !isUsableState(item) || item.enabled === null ? '未知' : item.enabled ? '已投入' : '已退出',
+  algorithm: isUsableState(item) ? item.algorithm ?? '—' : '—'
 })))
 const validationState = ref<'idle' | 'validating' | 'valid' | 'invalid' | 'error'>('idle')
 const validationDetail = ref('')
@@ -81,7 +83,7 @@ async function validateConfig() {
                     <el-select disabled placeholder="设备类型" /></div>
                   <el-table v-if="mock || deviceRows.length" :data="mock?units:deviceRows" stripe >
                     <el-table-column prop="id" label="设备编号"/><el-table-column prop="type" label="类型"/><el-table-column prop="available" label="可用容量 (MW)"/>
-                    <el-table-column label="控制参与"><template #default="scope"><el-tag :type="scope.row.enabled?'success':'info'">{{scope.row.enabled?'参与':'退出'}}</el-tag></template></el-table-column><el-table-column prop="status" label="运行状态"/><el-table-column prop="weight" label="控制权重"/>
+                    <el-table-column label="控制参与"><template #default="scope"><el-tag :type="scope.row.enabled?'success':'info'">{{scope.row.enabled===null?'未知':scope.row.enabled?'参与':'退出'}}</el-tag></template></el-table-column><el-table-column prop="status" label="运行状态"/><el-table-column prop="weight" label="控制权重"/>
                   </el-table>
                   <el-empty v-if="!mock && !deviceRows.length" description="设备与测点元数据暂不可用"/>
                 </el-card>
