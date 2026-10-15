@@ -90,9 +90,9 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
         <span>部分后端不可达：{{ errors.map(s=>s.name).join('、') }}。其他可用功能不受影响。</span>
         <el-button link type="danger" @click="showDetails=!showDetails">{{showDetails?'收起':'查看详情'}}</el-button>
       </div>
-      <div v-if="showDetails && errors.length" class="panel-card panel">
+      <el-card v-if="showDetails && errors.length" shadow="never" class="panel-card panel">
         <div v-for="s in errors" :key="s.id" class="log-line">{{s.name}}：{{s.detail}} · 最近检查 {{s.checkedAt??'未检查'}}</div>
-      </div>
+      </el-card>
       <el-main class="app-main">
         <div class="content">
           <div class="head page-head">
