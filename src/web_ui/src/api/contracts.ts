@@ -14,6 +14,11 @@ export interface ServiceHealth {
   detail: string
   checkedAt?: string
 }
+export interface RuntimeInfo {
+  controllerVersion: string
+  apiVersion: string
+  buildRevision: string | null
+}
 export interface StationSnapshot {
   timestamp: string
   quality: DataQuality
