@@ -10,9 +10,10 @@ defineProps<{ mock: boolean }>()
 const analysisTab = ref('performance')
 const fromTime = ref(new Date(Date.now() - 60 * 60 * 1000).toISOString())
 const toTime = ref(new Date().toISOString())
-const liveHistory = useResource<HistorySeries[]>(() => controllerApi.history(['station.active_power','station.active_power_target'], fromTime.value, toTime.value), 0)
+const liveHistory = useResource<HistorySeries[]>(() => controllerApi.history(['station.active_power','station.active_power_target','station.devices_total_active_power'], fromTime.value, toTime.value), 0)
 const historyState = liveHistory.state
 const historyError = liveHistory.error
+const historySeries = computed(() => liveHistory.data.value ?? [])
 const historyRows = computed(() => {
   const actual = liveHistory.data.value?.find(series => series.signalId === 'station.active_power')
   const target = liveHistory.data.value?.find(series => series.signalId === 'station.active_power_target')
@@ -66,8 +67,8 @@ async function refreshHistory() {
                 <el-table-column prop="name" label="指标" /><el-table-column prop="basis" label="评价依据" /><el-table-column prop="status" label="结果" />
               </el-table>
             </el-card>
-            <SignalAnalysis v-else-if="analysisTab==='signal' && mock" />
-            <el-card shadow="never" v-else-if="analysisTab==='signal'" class="panel-card panel"><el-empty description="等待同步历史信号与采样率数据" /></el-card>
+            <SignalAnalysis v-else-if="analysisTab==='signal' && (mock || historySeries.length)" :mock="mock" :history="historySeries" />
+            <el-card shadow="never" v-else-if="analysisTab==='signal'" class="panel-card panel"><el-empty description="等待包含原始时间戳及质量标记的历史数据" /><el-button @click="refreshHistory">重新查询</el-button></el-card>
             <el-card shadow="never" v-else-if="analysisTab==='identification'" class="panel-card panel">
               <h2 class="app-panel-title panel-title">系统辨识</h2>
               <el-descriptions :column="1" border>
