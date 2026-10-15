@@ -6,6 +6,7 @@ import { capabilityMetrics, type CapabilityMetric } from '../mock/capabilities'
 import { station, controls } from '../mock/data'
 import { useStationReadModel } from '../composables/useControllerReadModel'
 import type { CapabilitySnapshot, Measurement } from '../api/contracts'
+import { isUsableMeasurement } from '../api/quality'
 
 type Health = 'healthy' | 'unavailable' | 'unknown'
 type Service = { id: string; name: string; url: string; state: Health; detail: string; checkedAt?: string }
@@ -14,7 +15,7 @@ const live = useStationReadModel()
 const stationSnapshot = computed(() => live.station.data.value)
 const stationHealthy = live.healthy
 function display(value: Measurement | undefined, digits: number): string {
-  return value?.quality === 'GOOD' && value.value !== null && value.value !== undefined && Number.isFinite(value.value)
+  return isUsableMeasurement(value)
     ? value.value.toFixed(digits) : '—'
 }
 const liveFunctions = computed(() => (live.functions.data.value ?? []).map(f => ({
@@ -33,7 +34,7 @@ const renderedCapabilities = computed<CapabilityMetric[]>(() => props.mock ? cap
       id: reason.deviceId,
       type: reason.category,
       reason: reason.reason,
-      capacity: reason.limitedPower.quality === 'GOOD' ? reason.limitedPower.value ?? undefined : undefined,
+      capacity: isUsableMeasurement(reason.limitedPower) ? reason.limitedPower.value ?? undefined : undefined,
       since: reason.since ?? '—'
     }))
   })))
