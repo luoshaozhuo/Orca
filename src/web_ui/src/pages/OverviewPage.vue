@@ -4,8 +4,9 @@ import MetricCard from '../components/MetricCard.vue'
 import StationTrend from '../components/StationTrend.vue'
 import { capabilityMetrics, type CapabilityMetric } from '../mock/capabilities'
 import { station, controls } from '../mock/data'
-import { useStationReadModel } from '../composables/useControllerReadModel'
-import type { CapabilitySnapshot, Measurement } from '../api/contracts'
+import { useResource, useStationReadModel } from '../composables/useControllerReadModel'
+import { controllerApi } from '../api/client'
+import type { CapabilitySnapshot, HistorySeries, Measurement } from '../api/contracts'
 import { isUsableMeasurement } from '../api/quality'
 
 type Health = 'healthy' | 'unavailable' | 'unknown'
@@ -14,6 +15,12 @@ const props = defineProps<{ mock: boolean; services: Service[] }>()
 const live = useStationReadModel()
 const stationSnapshot = computed(() => live.station.data.value)
 const stationHealthy = live.healthy
+const liveHistory = useResource<HistorySeries[]>(() => {
+  const end = Date.now()
+  return controllerApi.history(['station.active_power','station.reactive_power','station.wind_speed','station.wind_power'],
+    new Date(end - 30 * 60 * 1000).toISOString(), new Date(end).toISOString())
+}, 30000)
+const historySeries = computed(() => liveHistory.data.value ?? [])
 function display(value: Measurement | undefined, digits: number): string {
   return isUsableMeasurement(value)
     ? value.value.toFixed(digits) : '—'
@@ -142,7 +149,7 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
                 <p class="section-note">同一设备可能存在多个原因；正式接口需提供主原因、附加原因和快照时间，避免重复统计。</p>
               </template>
             </el-drawer>
-            <el-card shadow="never" class="panel-card panel overview-trend"><StationTrend v-if="mock"/><el-empty v-else description="等待全场 P/Q、风速及风电有功趋势数据"/></el-card>
+            <el-card shadow="never" class="panel-card panel overview-trend"><StationTrend v-if="mock || historySeries.length" :mock="mock" :history="historySeries"/><el-empty v-else description="全场 P/Q、风速及风电有功历史数据尚未可用"/></el-card>
 
  </div>
 </template>
