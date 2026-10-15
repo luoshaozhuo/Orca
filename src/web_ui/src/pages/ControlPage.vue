@@ -5,6 +5,7 @@ import ResponseChart from '../components/ResponseChart.vue'
 import { station, controls, units, response, unitResponse } from '../mock/data'
 import { useStationReadModel } from '../composables/useControllerReadModel'
 import type { Measurement } from '../api/contracts'
+import { isUsableMeasurement, isUsableStation } from '../api/quality'
 
 const props = defineProps<{ mock: boolean }>()
 const emit = defineEmits<{ navigate: [page: 'commissioning' | 'events'] }>()
@@ -30,7 +31,7 @@ const liveUnits = computed(() => (live.devices.data.value ?? []).slice(0, 8).map
 const availableUnits = computed(() => props.mock ? units.map(item => ({ id: item.id, type: item.type })) :
   (live.devices.data.value ?? []).map(item => ({ id: item.id, type: item.type })))
 function formatMeasurement(value: Measurement | undefined): string {
-  return value?.quality === 'GOOD' && value.value !== null && Number.isFinite(value.value)
+  return isUsableMeasurement(value)
     ? `${value.value.toFixed(2)} ${value.unit}` : '—'
 }
 const currentTarget = computed(() => props.mock
@@ -57,7 +58,7 @@ const controlRows = computed(() => props.mock
                 <el-card shadow="never" class="panel-card panel">
                   <h2 class="app-panel-title panel-title">{{selectedControl==='station'?'全场控制工作台':'机组控制工作台'}}</h2>
                   <el-select v-if="selectedControl==='units'" v-model="selectedUnit" filterable><el-option v-for="u in availableUnits" :key="u.id" :label="u.id+' · '+u.type" :value="u.id"/></el-select>
-                  <div class="status-row"><span>控制权与安全状态</span><el-tag :type="mock?'success':'info'">{{mock?'远方自动 · 演示':(liveStation?.quality==='GOOD' ? liveStation.authority ?? '未知':'未知')}}</el-tag></div>
+                  <div class="status-row"><span>控制权与安全状态</span><el-tag :type="mock?'success':'info'">{{mock?'远方自动 · 演示':(isUsableStation(liveStation) ? liveStation.authority ?? '未知':'未知')}}</el-tag></div>
                   <div class="status-row"><span>当前参考 / 指令</span><b>{{currentTarget}}</b></div>
                   <div class="status-row"><span>实际反馈</span><b>{{currentActual}}</b></div>
                   <div class="status-row"><span>最近执行结果</span><b>{{mock?'成功 · 14:41:12':'—'}}</b></div>
