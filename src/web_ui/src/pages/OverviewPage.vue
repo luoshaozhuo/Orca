@@ -5,11 +5,11 @@ import StationTrend from '../components/StationTrend.vue'
 import { capabilityMetrics, type CapabilityMetric } from '../mock/capabilities'
 import { station, controls } from '../mock/data'
 import { useStationReadModel } from '../composables/useControllerReadModel'
-import type { Measurement } from '../api/contracts'
+import type { CapabilitySnapshot, Measurement } from '../api/contracts'
 
 type Health = 'healthy' | 'unavailable' | 'unknown'
 type Service = { id: string; name: string; url: string; state: Health; detail: string; checkedAt?: string }
-defineProps<{ mock: boolean; services: Service[] }>()
+const props = defineProps<{ mock: boolean; services: Service[] }>()
 const live = useStationReadModel()
 const stationSnapshot = computed(() => live.station.data.value)
 const stationHealthy = live.healthy
@@ -21,6 +21,23 @@ const liveFunctions = computed(() => (live.functions.data.value ?? []).map(f => 
  name:f.name, enabled:f.enabled === null?'未知':f.enabled?'已投入':'已退出', response:f.responseState,
  algorithm:f.algorithm ?? '—', uptime:f.uptimeSeconds === null?'—':`${Math.round(f.uptimeSeconds/60)} min`
 })))
+const renderedCapabilities = computed<CapabilityMetric[]>(() => props.mock ? capabilityMetrics :
+  (live.capabilities.data.value ?? []).map((capability: CapabilitySnapshot) => ({
+    id: capability.id,
+    label: capability.label,
+    value: display(capability.measurement, 2),
+    unit: capability.measurement.unit,
+    summary: capability.summary,
+    definition: `快照：${capability.timestamp}；质量：${capability.measurement.quality}`,
+    details: capability.reasons.map(reason => ({
+      id: reason.deviceId,
+      type: reason.category,
+      reason: reason.reason,
+      capacity: reason.limitedPower.quality === 'GOOD' ? reason.limitedPower.value ?? undefined : undefined,
+      since: reason.since ?? '—'
+    }))
+  })))
+)
 const selectedMetric = ref<CapabilityMetric | null>(null)
 const metricDrawerOpen = ref(false)
 const openMetric = (metric: CapabilityMetric) => { selectedMetric.value = metric; metricDrawerOpen.value = true }
@@ -44,11 +61,12 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
               <div><span class="metric-label">执行策略</span><strong>{{ mock ? station.strategy : (stationHealthy ? stationSnapshot?.strategy ?? '未知' : '未知') }}</strong></div>
             </el-card>
             <h2 class="app-panel-title panel-title">全场可控能力</h2>
+            <el-empty v-if="!mock && !renderedCapabilities.length" description="可控能力快照暂不可用，不推断设备健康或可控容量" />
             <el-row :gutter="12" class="overview-metrics">
-              <el-col v-for="metric in capabilityMetrics" :key="metric.id" :xs="24" :sm="12" :md="8" :xl="4" class="capability-col"><MetricCard
-                :label="metric.label" :value="mock ? metric.value : '—'" :unit="metric.unit"
-                :summary="mock ? metric.summary : '设备与能力快照待接入'"
-                :definition="metric.definition" :clickable="mock" :warning="mock && metric.details.length > 0"
+              <el-col v-for="metric in renderedCapabilities" :key="metric.id" :xs="24" :sm="12" :md="8" :xl="4" class="capability-col"><MetricCard
+                :label="metric.label" :value="metric.value" :unit="metric.unit"
+                :summary="metric.summary"
+                :definition="metric.definition" :clickable="metric.details.length > 0" :warning="metric.details.length > 0"
                 @open="openMetric(metric)" /></el-col>
             </el-row>
             <el-row :gutter="12" class="overview-rows">
@@ -108,7 +126,7 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
                 <el-descriptions :column="1" border>
                   <el-descriptions-item label="当前指标">{{ selectedMetric.value }} {{ selectedMetric.unit }}</el-descriptions-item>
                   <el-descriptions-item label="异常摘要">{{ selectedMetric.summary }}</el-descriptions-item>
-                  <el-descriptions-item label="数据说明">模拟数据 · 实际值待接入 Controller</el-descriptions-item>
+                  <el-descriptions-item label="数据说明">{{mock ? '模拟数据 · 不代表实际控制能力' : 'Controller 能力快照 · 仅质量有效的数值参与统计'}}</el-descriptions-item>
                 </el-descriptions>
                 <h3 class="app-section-title metric-drawer-section">受影响设备</h3>
                 <el-table :data="selectedMetric.details" max-height="440" stripe>
@@ -116,7 +134,7 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
                   <el-table-column prop="type" label="设备类型" min-width="95" />
                   <el-table-column prop="reason" label="原因" min-width="125" />
                   <el-table-column prop="capacity" label="受限容量" min-width="95">
-                    <template #default="{row}">{{ row.capacity != null ? row.capacity + '（示意）' : '—' }}</template>
+                    <template #default="{row}">{{ row.capacity != null ? row.capacity + (mock ? '（示意）' : '') : '—' }}</template>
                   </el-table-column>
                   <el-table-column prop="since" label="发生时间" min-width="90" />
                 </el-table>
