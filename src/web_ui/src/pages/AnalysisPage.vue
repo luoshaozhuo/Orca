@@ -53,7 +53,7 @@ const diagnosticRows = computed(() => props.mock ? reasons :
   }))
 )
 const fromTime = ref(new Date(Date.now() - 60 * 60 * 1000).toISOString())
-const toTime = ref(new Date().toISOString())
+const toTime = ref(historyRange.value[1].toISOString())
 const liveHistory = useResource<HistorySeries[]>(() => controllerApi.history(['station.active_power','station.active_power_target','station.devices_total_active_power'], fromTime.value, toTime.value), 0)
 const historyState = liveHistory.state
 const historyError = liveHistory.error
@@ -74,9 +74,15 @@ const historyRows = computed(() => {
     }))
 })
 async function refreshHistory() {
-  const now = Date.now()
-  toTime.value = new Date(now).toISOString()
-  fromTime.value = new Date(now - 3600000).toISOString()
+  const [start,end] = historyRange.value
+  const duration = end.getTime()-start.getTime()
+  if (!Number.isFinite(duration) || duration<=0 || duration>24*3600000 || end.getTime()>Date.now()+2000) {
+    historyQueryError.value = '历史查询时间必须位于过去，范围大于零且不超过 24 小时'
+    return
+  }
+  historyQueryError.value = null
+  fromTime.value = start.toISOString()
+  toTime.value = end.toISOString()
   await liveHistory.refresh()
 }
 
@@ -90,12 +96,21 @@ async function refreshHistory() {
               <el-tab-pane label="系统辨识" name="identification" />
               <el-tab-pane label="寻因分析" name="diagnosis" />
             </el-tabs>
+            <el-row v-if="!mock && (analysisTab==='performance'||analysisTab==='signal')" :gutter="12" class="overview-metrics">
+              <el-col :xs="24" :lg="18">
+                <el-date-picker v-model="historyRange" type="datetimerange" start-placeholder="开始时间" end-placeholder="结束时间"
+                  range-separator="至" :clearable="false" style="width:100%" />
+              </el-col>
+              <el-col :xs="24" :lg="6"><el-button type="primary" :loading="historyState==='loading'" @click="refreshHistory">查询历史数据</el-button></el-col>
+            </el-row>
+            <el-alert v-if="!mock && historyQueryError && (analysisTab==='performance'||analysisTab==='signal')"
+              :title="historyQueryError" type="warning" :closable="false" />
             <el-card shadow="never" class="panel-card panel" v-if="analysisTab==='performance'">
               <h2 class="app-panel-title panel-title">动态性能与响应评价</h2>
               <ResponseChart v-if="mock || historyRows.length" :data="mock ? response : historyRows" :show-limit="mock" :preview="mock" :title="mock ? 'AGC 阶跃 · 目标 / 响应（示意）' : '全场有功历史 · 目标 / 反馈'" />
               <el-alert v-if="!mock && historyState==='error'" type="error" :title="historyError ?? '历史数据接口失败'" :closable="false" />
               <el-empty v-else-if="!mock && !historyRows.length" description="无质量有效且时间对齐的历史响应数据" />
-              <el-button v-if="!mock" :loading="historyState==='loading'" @click="refreshHistory">查询最近一小时历史</el-button>
+              
               <el-alert v-if="!mock && performanceState==='error'" type="error" :title="performanceError ?? '动态性能记录不可用'" :closable="false" />
               <el-table v-if="performanceRows.length" :data="performanceRows" stripe>
                 <el-table-column prop="id" label="试验 ID" min-width="110" />
@@ -127,7 +142,7 @@ async function refreshHistory() {
               <el-button v-if="!mock" :loading="assessmentState==='loading'" @click="assessments.refresh">读取评价记录</el-button>
             </el-card>
             <SignalAnalysis v-else-if="analysisTab==='signal' && (mock || historySeries.length)" :mock="mock" :history="historySeries" />
-            <el-card shadow="never" v-else-if="analysisTab==='signal'" class="panel-card panel"><el-empty description="等待包含原始时间戳及质量标记的历史数据" /><el-button @click="refreshHistory">重新查询</el-button></el-card>
+            <el-card shadow="never" v-else-if="analysisTab==='signal'" class="panel-card panel"><el-empty description="等待包含原始时间戳及质量标记的历史数据" /></el-card>
             <el-card shadow="never" v-else-if="analysisTab==='identification'" class="panel-card panel">
               <h2 class="app-panel-title panel-title">系统辨识</h2>
               <el-descriptions :column="1" border>
