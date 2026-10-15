@@ -15,7 +15,7 @@ const emit = defineEmits<{ open: [] }>()
 </script>
 
 <template>
-  <div class="panel-card metric-card" :class="{ 'metric-card--clickable': clickable }"
+  <el-card shadow="never" class="panel-card metric-card" :class="{ 'metric-card--clickable': clickable }"
        :role="clickable ? 'button' : undefined" :tabindex="clickable ? 0 : undefined"
        @click="clickable && emit('open')"
        @keydown.enter.prevent="clickable && emit('open')"
@@ -31,5 +31,5 @@ const emit = defineEmits<{ open: [] }>()
     </div>
     <div class="app-metric metric-value">{{ value }} <small v-if="unit">{{ unit }}</small></div>
     <div class="metric-foot" :class="{ 'metric-card__warning': warning }">{{ summary || ' ' }}</div>
-  </div>
+  </el-card>
 </template>
