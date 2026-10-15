@@ -30,7 +30,7 @@ const menu = [
 const mobile = ref(false)
 const drawer = ref(false)
 const showDetails = ref(false)
-const mock = ref(!isApiConfigured())
+const mock = ref(!isApiConfigured() && import.meta.env.VITE_PREVIEW_DATA === 'true')
 const controllerInfo = useResource(controllerApi.runtimeInfo, 30000)
 const controllerVersion = computed(() => controllerInfo.state.value==='ready' ? controllerInfo.data.value?.controllerVersion ?? '—' : '—')
 const errors = computed(() => services.value.filter(s => s.state === 'unavailable'))
@@ -100,7 +100,7 @@ onUnmounted(()=>{window.removeEventListener('resize',resize);if(timer)clearInter
       <el-main class="app-main">
         <div class="content">
           <div class="head page-head">
-            <div><h1 class="app-page-title">{{ names[page] }}</h1><p>{{mock?'所有指标、记录与响应曲线均为用于空间与交互评审的模拟数据，不代表实际运行。':'实时接口模式：未连接的数据保持未知，不伪造运行值。'}}</p></div>
+            <div><h1 class="app-page-title">{{ names[page] }}</h1><p>{{mock?'开发预览数据，不代表实际运行。':isApiConfigured()?'Controller API 已配置，数据质量无效或不可用时保持未知。':'未配置 Controller API，运行状态保持未知，不使用模拟数据。'}}</p></div>
 
           </div>
 
