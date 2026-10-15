@@ -47,14 +47,14 @@ const liveStation = computed(() => live.station.data.value)
 const liveDevice = computed(() => live.devices.data.value?.find(unit => unit.id === selectedUnit.value))
 const liveControls = computed(() => (live.functions.data.value ?? []).map(item => ({
   name: item.name,
-  target: formatMeasurement(item.target),
-  active: formatMeasurement(item.actual),
+  target: isUsableState(item) ? formatMeasurement(item.target) : '—',
+  active: isUsableState(item) ? formatMeasurement(item.actual) : '—',
   limit: isUsableState(item) ? item.constraint ?? '未知' : 'UNKNOWN'
 })))
 const liveUnits = computed(() => (live.devices.data.value ?? []).slice(0, 8).map(item => ({
   id: item.id,
-  target: formatMeasurement(item.targetPower),
-  active: formatMeasurement(item.activePower),
+  target: isUsableState(item) ? formatMeasurement(item.targetPower) : '—',
+  active: isUsableState(item) ? formatMeasurement(item.activePower) : '—',
   status: isUsableState(item) ? item.status : 'UNKNOWN'
 })))
 const availableUnits = computed(() => props.mock ? units.map(item => ({ id: item.id, type: item.type })) :
@@ -115,7 +115,7 @@ const controlRows = computed(() => props.mock
                 <el-card shadow="never" class="panel-card panel"><h2 class="app-panel-title panel-title">控制对象</h2>
                   <el-table :data="controlRows" stripe>
                     <el-table-column :prop="selectedControl==='station'?'name':'id'" :label="selectedControl==='station'?'功能':'机组'"/>
-                    <el-table-column :prop="selectedControl==='station'?'target':'target'" label="目标"/><el-table-column :prop="selectedControl==='station'?'actual':'active'" label="反馈"/><el-table-column :prop="selectedControl==='station'?'limit':'status'" label="约束状态"/>
+                    <el-table-column prop="target" label="目标"/><el-table-column :prop="selectedControl==='station'?'actual':'active'" label="反馈"/><el-table-column :prop="selectedControl==='station'?'limit':'status'" label="约束状态"/>
                   </el-table>
                 </el-card>
               </div></el-col>
