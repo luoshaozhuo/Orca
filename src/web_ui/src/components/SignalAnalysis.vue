@@ -140,14 +140,17 @@ const chartOption = computed<EChartsOption>(() => {
     x=samples.value.map(item => props.mock ? item.timestamp : new Date(item.timestamp).toLocaleTimeString())
     y=raw.value
   }
+  const liveTime = !props.mock && mode.value === 'time'
   return {
     ...chartVisuals(), grid:{left:65,right:28,top:42,bottom:65},
-    xAxis:{type:'category',name:xName,boundaryGap:false,data:x,...chartAxisText()},
+    xAxis:liveTime ? {type:'time' as const,name:xName,boundaryGap:false,...chartAxisText()} :
+      {type:'category' as const,name:xName,boundaryGap:false,data:x,...chartAxisText()},
     yAxis:{type:'value',name:yName,scale:mode.value!=='correlation',
       min:mode.value==='correlation'?-1:undefined,max:mode.value==='correlation'?1:undefined,...chartAxisText()},
     dataZoom:[{type:'inside'},{type:'slider',height:14,bottom:12,...chartZoomText()}],
     series:[{type:'line',name:seriesMap[channel.value],showSymbol:false,
-      data:y.map(value=>Number(value.toFixed(5)))}]
+      data:liveTime ? samples.value.map(point => [point.timestamp, Number(point.value.toFixed(5))]) :
+        y.map(value=>Number(value.toFixed(5)))}]
   }
 })
 function formatMetric(value: number | null): string {
