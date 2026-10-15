@@ -62,15 +62,27 @@ const chartOption=computed<EChartsOption>(()=>{
  <el-card shadow="never" class="panel-card panel">
   <h2 class="app-panel-title panel-title">时域 · 幅度谱 · Welch PSD · 时滞相关</h2>
   <el-alert title="基于模拟波形计算 DFT 幅度谱与 Welch 功率谱密度。相关性不证明因果；示例采样间隔 2 s。" type="info" :closable="false" show-icon/>
-  <div class="signal-tools">
-   <el-select v-model="channel" aria-label="分析信号"><el-option v-for="(label,key) in seriesMap" :key="key" :label="label" :value="key"/></el-select>
-   <el-segmented v-model="mode" :options="[{label:'时域',value:'time'},{label:'幅度谱',value:'spectrum'},{label:'Welch PSD',value:'welch'},{label:'时滞相关',value:'correlation'}]"/>
-   <el-select v-if="mode==='spectrum'||mode==='welch'" v-model="windowType" aria-label="窗函数"><el-option label="Hann" value="hann"/><el-option label="矩形" value="rectangular"/></el-select>
-   <el-checkbox v-if="mode==='spectrum'||mode==='welch'" v-model="removeMean" label="去均值"/>
-   <el-select v-if="mode==='welch'" v-model="segmentSize" aria-label="Welch 分段长度" style="width:130px"><el-option label="16 点" :value="16"/><el-option label="32 点" :value="32"/><el-option label="64 点" :value="64"/></el-select>
-   <el-select v-if="mode==='welch'" v-model="overlapFraction" aria-label="Welch 重叠率" style="width:130px"><el-option label="0% 重叠" :value="0"/><el-option label="50% 重叠" :value="0.5"/><el-option label="75% 重叠" :value="0.75"/></el-select>
-  </div>
-  <el-descriptions :column="4" border class="signal-stats">
+  <el-row :gutter="12" class="signal-tools">
+    <el-col :xs="24" :sm="12" :lg="6">
+      <el-select v-model="channel" aria-label="分析信号"><el-option v-for="(label,key) in seriesMap" :key="key" :label="label" :value="key"/></el-select>
+    </el-col>
+    <el-col :xs="24" :lg="12" class="signal-mode">
+      <el-segmented v-model="mode" :options="[{label:'时域',value:'time'},{label:'幅度谱',value:'spectrum'},{label:'Welch PSD',value:'welch'},{label:'时滞相关',value:'correlation'}]"/>
+    </el-col>
+    <el-col v-if="mode==='spectrum'||mode==='welch'" :xs="24" :sm="12" :lg="6">
+      <el-select v-model="windowType" aria-label="窗函数"><el-option label="Hann" value="hann"/><el-option label="矩形" value="rectangular"/></el-select>
+    </el-col>
+    <el-col v-if="mode==='spectrum'||mode==='welch'" :xs="24" :sm="12" :lg="6">
+      <el-checkbox v-model="removeMean" label="去均值"/>
+    </el-col>
+    <el-col v-if="mode==='welch'" :xs="24" :sm="12" :lg="6">
+      <el-select v-model="segmentSize" aria-label="Welch 分段长度"><el-option label="16 点" :value="16"/><el-option label="32 点" :value="32"/><el-option label="64 点" :value="64"/></el-select>
+    </el-col>
+    <el-col v-if="mode==='welch'" :xs="24" :sm="12" :lg="6">
+      <el-select v-model="overlapFraction" aria-label="Welch 重叠率"><el-option label="0% 重叠" :value="0"/><el-option label="50% 重叠" :value="0.5"/><el-option label="75% 重叠" :value="0.75"/></el-select>
+    </el-col>
+  </el-row>
+  <el-descriptions :column="2" border class="signal-stats">
    <el-descriptions-item label="样本量">{{stats.n}}</el-descriptions-item>
    <el-descriptions-item label="均值">{{stats.mean.toFixed(2)}} MW</el-descriptions-item>
    <el-descriptions-item label="RMS">{{stats.rms.toFixed(2)}} MW</el-descriptions-item>
@@ -81,9 +93,11 @@ const chartOption=computed<EChartsOption>(()=>{
  </el-card>
 </template>
 <style scoped>
-.signal-tools{display:flex;align-items:center;flex-wrap:wrap;gap:var(--app-space-3);margin:var(--app-space-3) 0}
-.signal-tools .el-select{width:165px}
+.signal-tools{row-gap:var(--app-space-3);align-items:center;margin:var(--app-space-3) 0}
+.signal-tools .el-select{width:100%;min-width:0}
+.signal-mode{min-width:0}
+.signal-mode :deep(.el-segmented){width:100%;max-width:100%;height:auto;flex-wrap:wrap}
 .signal-stats{margin-bottom:var(--app-space-3)}
 .signal-plot{width:100%;height:380px;min-width:0}
-@media(max-width:767px){.signal-stats :deep(.el-descriptions__table){min-width:500px}}
+
 </style>
