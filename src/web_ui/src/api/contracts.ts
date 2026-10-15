@@ -25,6 +25,9 @@ export interface StationSnapshot {
   version: string | null
   mode: string | null
   authority: string | null
+  authorityGeneration?: string | null
+  safetyState?: 'READY' | 'BLOCKED' | 'UNKNOWN'
+  writeEnabled?: boolean | null
   strategy: string | null
   activePower: Measurement
   targetPower?: Measurement
