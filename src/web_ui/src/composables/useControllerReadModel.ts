@@ -34,13 +34,13 @@ export function useResource<T>(load: () => Promise<T>, periodMs = 0): Resource<T
     if (data.value === null) state.value = 'loading'
     try {
       const result = await load()
-      if (disposed || generation !== requestGeneration) return
+      if (disposed || pending || generation !== requestGeneration) return
       data.value = result
       state.value = 'ready'
       error.value = null
       updatedAt.value = new Date().toISOString()
     } catch (cause) {
-      if (disposed || generation !== requestGeneration) return
+      if (disposed || pending || generation !== requestGeneration) return
       // Fail closed: a disconnected endpoint must never leave its last sample marked current.
       data.value = null
       state.value = 'error'
