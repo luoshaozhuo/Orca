@@ -11,6 +11,8 @@ const analysisTab = ref('performance')
 const fromTime = ref(new Date(Date.now() - 60 * 60 * 1000).toISOString())
 const toTime = ref(new Date().toISOString())
 const liveHistory = useResource<HistorySeries[]>(() => controllerApi.history(['station.active_power','station.active_power_target'], fromTime.value, toTime.value), 0)
+const historyState = liveHistory.state
+const historyError = liveHistory.error
 const historyRows = computed(() => {
   const actual = liveHistory.data.value?.find(series => series.signalId === 'station.active_power')
   const target = liveHistory.data.value?.find(series => series.signalId === 'station.active_power_target')
@@ -41,9 +43,9 @@ const historyRows = computed(() => {
             <el-card shadow="never" class="panel-card panel" v-if="analysisTab==='performance'">
               <h2 class="app-panel-title panel-title">动态性能与响应评价</h2>
               <ResponseChart v-if="mock || historyRows.length" :data="mock ? response : historyRows" :title="mock ? 'AGC 阶跃 · 目标 / 响应（示意）' : '全场有功历史 · 目标 / 反馈'" />
-              <el-alert v-if="!mock && liveHistory.state==='error'" type="error" :title="liveHistory.error ?? '历史数据接口失败'" :closable="false" />
+              <el-alert v-if="!mock && historyState==='error'" type="error" :title="historyError ?? '历史数据接口失败'" :closable="false" />
               <el-empty v-else-if="!mock && !historyRows.length" description="无质量有效且时间对齐的历史响应数据" />
-              <el-button v-if="!mock" :loading="liveHistory.state==='loading'" @click="liveHistory.refresh">查询最近一小时历史</el-button>
+              <el-button v-if="!mock" :loading="historyState==='loading'" @click="liveHistory.refresh">查询最近一小时历史</el-button>
               <el-table :data="mock ? tests : []" stripe>
                 <el-table-column prop="id" label="试验" />
                 <el-table-column prop="algorithm" label="算法" />
