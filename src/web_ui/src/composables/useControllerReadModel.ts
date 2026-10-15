@@ -1,5 +1,6 @@
 import { computed, onMounted, onUnmounted, ref, type Ref } from 'vue'
 import { controllerApi, isApiConfigured } from '../api/client'
+import { isUsableStation } from '../api/quality'
 import type {
   AuditEvent, CapabilitySnapshot, ControlFunction, DeviceSnapshot, PipelineSnapshot,
   StationSnapshot
@@ -62,7 +63,7 @@ export function useStationReadModel() {
   const functions = useResource<ControlFunction[]>(controllerApi.functions, 1000)
   const capabilities = useResource<CapabilitySnapshot[]>(controllerApi.capabilities, 2000)
   const devices = useResource<DeviceSnapshot[]>(controllerApi.devices, 2000)
-  const healthy = computed(() => station.state.value === 'ready' && station.data.value?.quality === 'GOOD')
+  const healthy = computed(() => station.state.value === 'ready' && isUsableStation(station.data.value))
   return { station, functions, capabilities, devices, healthy }
 }
 export function useEventReadModel() {
