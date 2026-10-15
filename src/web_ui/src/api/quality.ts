@@ -11,7 +11,7 @@ export function isFreshTimestamp(timestamp: string | null | undefined, now = Dat
   return Number.isFinite(sampleTime) && age >= -2000 && age <= maxAgeMs
 }
 
-export function isUsableMeasurement(measurement: Measurement | null | undefined): boolean {
+export function isUsableMeasurement(measurement: Measurement | null | undefined): measurement is Measurement & { value: number } {
   return measurement != null &&
     measurement.quality === 'GOOD' &&
     measurement.value !== null &&
@@ -19,7 +19,7 @@ export function isUsableMeasurement(measurement: Measurement | null | undefined)
     isFreshTimestamp(measurement.timestamp)
 }
 
-export function isUsableStation(snapshot: StationSnapshot | null | undefined): boolean {
+export function isUsableStation(snapshot: StationSnapshot | null | undefined): snapshot is StationSnapshot {
   return snapshot != null &&
     snapshot.quality === 'GOOD' &&
     isFreshTimestamp(snapshot.timestamp)
