@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import MetricCard from '../components/MetricCard.vue'
 import StationTrend from '../components/StationTrend.vue'
 import { capabilityMetrics, type CapabilityMetric } from '../mock/capabilities'
@@ -7,7 +7,7 @@ import { station, controls } from '../mock/data'
 import { useResource, useStationReadModel } from '../composables/useControllerReadModel'
 import { controllerApi } from '../api/client'
 import type { CapabilitySnapshot, HistorySeries, Measurement } from '../api/contracts'
-import { isUsableMeasurement, isUsableState } from '../api/quality'
+import { isFreshTimestamp, isUsableMeasurement, isUsableState } from '../api/quality'
 
 type Health = 'healthy' | 'unavailable' | 'unknown'
 type Service = { id: string; name: string; url: string; state: Health; detail: string; checkedAt?: string }
@@ -31,25 +31,30 @@ const liveFunctions = computed(() => (live.functions.data.value ?? []).map(f => 
  algorithm:isUsableState(f)?f.algorithm ?? '—':'—', uptime:isUsableState(f)&&f.uptimeSeconds!==null?`${Math.round(f.uptimeSeconds/60)} min`:'—'
 })))
 const renderedCapabilities = computed<CapabilityMetric[]>(() => props.mock ? capabilityMetrics :
-  (live.capabilities.data.value ?? []).map((capability: CapabilitySnapshot) => ({
-    id: capability.id,
-    label: capability.label,
-    value: display(capability.measurement, 2),
-    unit: capability.measurement.unit,
-    summary: capability.summary,
-    definition: `快照：${capability.timestamp}；质量：${capability.measurement.quality}`,
-    details: capability.reasons.map(reason => ({
-      id: reason.deviceId,
-      type: reason.category,
-      reason: reason.reason,
-      capacity: isUsableMeasurement(reason.limitedPower) ? reason.limitedPower.value ?? undefined : undefined,
-      since: reason.since ?? '—'
-    }))
-  })))
+  (live.capabilities.data.value ?? []).map((capability: CapabilitySnapshot) => {
+    const fresh = isFreshTimestamp(capability.timestamp)
+    return {
+      id: capability.id,
+      label: capability.label,
+      value: fresh ? display(capability.measurement, 2) : '—',
+      unit: capability.measurement.unit,
+      summary: fresh ? capability.summary : '能力快照已过期，状态未知',
+      definition: `快照：${capability.timestamp}；质量：${capability.measurement.quality}`,
+      details: fresh ? capability.reasons.map(reason => ({
+        id: reason.deviceId,
+        type: reason.category,
+        reason: reason.reason,
+        capacity: isUsableMeasurement(reason.limitedPower) ? reason.limitedPower.value : undefined,
+        since: reason.since ?? '—'
+      })) : []
+    }
+  })
 )
-const selectedMetric = ref<CapabilityMetric | null>(null)
+const selectedMetricId = ref<string | null>(null)
+const selectedMetric = computed(() => renderedCapabilities.value.find(metric => metric.id===selectedMetricId.value) ?? null)
 const metricDrawerOpen = ref(false)
-const openMetric = (metric: CapabilityMetric) => { selectedMetric.value = metric; metricDrawerOpen.value = true }
+const openMetric = (metric: CapabilityMetric) => { selectedMetricId.value = metric.id; metricDrawerOpen.value = true }
+watch(selectedMetric, current => { if (!current) metricDrawerOpen.value = false })
 const statusLabel = (state: Health) => state === 'healthy' ? '可达' : state === 'unavailable' ? '不可达' : '未检测'
 const statusType = (state: Health) => state === 'healthy' ? 'success' : state === 'unavailable' ? 'danger' : 'info'
 </script>
