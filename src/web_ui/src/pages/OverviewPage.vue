@@ -25,11 +25,11 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
                 {label:'系统频率',value:mock?station.frequency.toFixed(2):'—',unit:'Hz',summary:mock?'额定 50 Hz · 模拟':'实际测量待接入',definition:'控制所采用的频率测量，须带原始时标、有效性和数据质量状态。'}
               ]" :key="m.label" :xs="24" :sm="12" :lg="6"><MetricCard v-bind="m" /></el-col>
             </el-row>
-            <div class="panel-card panel overview-mode">
+            <el-card shadow="never" class="panel-card panel overview-mode">
               <div><span class="metric-label">当前控制模式</span><strong>{{ mock ? '远方自动 · AGC + PFR' : '未知 · 控制状态待接入' }}</strong></div>
               <div><span class="metric-label">控制权</span><strong>{{ mock ? station.controlAuthority : '未知' }}</strong></div>
               <div><span class="metric-label">执行策略</span><strong>{{ mock ? station.strategy : '未知' }}</strong></div>
-            </div>
+            </el-card>
             <h2 class="app-panel-title panel-title">全场可控能力</h2>
             <el-row :gutter="12" class="overview-metrics">
               <el-col v-for="metric in capabilityMetrics" :key="metric.id" :xs="24" :sm="12" :md="8" :xl="4" class="capability-col"><MetricCard
@@ -40,7 +40,7 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
             </el-row>
             <el-row :gutter="12" class="overview-rows">
               <el-col :xs="24" :lg="14">
-                <div class="panel-card panel">
+                <el-card shadow="never" class="panel-card panel">
                   <h2 class="app-panel-title panel-title">控制功能与算法</h2>
                   <el-table :data="mock?controls:['AGC','AVC','PFR','IR'].map(name=>({name,enabled:'—',response:'—',algorithm:'—',uptime:'—'}))" stripe>
                     <el-table-column prop="name" label="功能" width="90"/>
@@ -50,10 +50,10 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
                     <el-table-column prop="uptime" label="运行时长"/>
                   </el-table>
                   <p class="section-note">功能投入与功能响应分开显示；待接入 Controller 运行状态。</p>
-                </div>
+                </el-card>
               </el-col>
               <el-col :xs="24" :lg="10">
-                <div class="panel-card panel">
+                <el-card shadow="never" class="panel-card panel">
                   <h2 class="app-panel-title panel-title">上位机及 Wind Hub 通信</h2>
                   <div class="status-row"><span>上位机 / 调度指令源</span><el-tag type="info">运行状态待接入</el-tag></div>
                   <div v-for="service in services" :key="service.id" class="status-row">
@@ -62,12 +62,12 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
                   </div>
                   <p class="section-note">服务可达性不代表业务健康。数据时效、订阅质量及写入能力需后台独立上报。</p>
 
-                </div>
+                </el-card>
               </el-col>
             </el-row>
             <el-row :gutter="12" class="overview-rows">
               <el-col :xs="24" :lg="14">
-                <div class="panel-card panel">
+                <el-card shadow="never" class="panel-card panel">
                   <h2 class="app-panel-title panel-title">实时性能与总体配置</h2>
                   <el-descriptions :column="2" border>
                     <el-descriptions-item label="控制周期设定">{{mock?station.period:'—'}} ms</el-descriptions-item>
@@ -77,16 +77,16 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
                     <el-descriptions-item label="控制权限">{{mock?station.controlAuthority:'未知'}}</el-descriptions-item>
                     <el-descriptions-item label="最后有效测量">{{mock?station.lastSample:'—'}}</el-descriptions-item>
                   </el-descriptions>
-                </div>
+                </el-card>
               </el-col>
               <el-col :xs="24" :lg="10">
-                <div class="panel-card panel">
+                <el-card shadow="never" class="panel-card panel">
                   <h2 class="app-panel-title panel-title">运行概览</h2>
                   <div class="status-row"><span>全场额定容量</span><b>{{mock?station.rated:'—'}} MW</b></div>
                   <div class="status-row"><span>可用调节容量</span><b>{{mock?station.available:'—'}} MW</b></div>
                   <div class="status-row"><span>控制执行异常</span><b>{{mock?'1 项待确认':'—'}}</b></div>
                   <div class="status-row"><span>最近控制事件</span><b>{{mock?'14:41:12 AGC 调节':'—'}}</b></div>
-                </div>
+                </el-card>
               </el-col>
             </el-row>
             <el-drawer v-model="metricDrawerOpen" direction="rtl" size="680px" class="capability-drawer"
@@ -110,7 +110,7 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
                 <p class="section-note">同一设备可能存在多个原因；正式接口需提供主原因、附加原因和快照时间，避免重复统计。</p>
               </template>
             </el-drawer>
-            <div class="panel-card panel overview-trend"><StationTrend v-if="mock"/><el-empty v-else description="等待全场 P/Q、风速及风电有功趋势数据"/></div>
+            <el-card shadow="never" class="panel-card panel overview-trend"><StationTrend v-if="mock"/><el-empty v-else description="等待全场 P/Q、风速及风电有功趋势数据"/></el-card>
 
  </div>
 </template>
