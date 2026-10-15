@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { usePipelineReadModel } from '../composables/useControllerReadModel'
 import { isUsableState } from '../api/quality'
 
-defineProps<{ mock: boolean }>()
+const props = defineProps<{ mock: boolean }>()
 
 type Node = { id: string; label: string; algorithm: string; choices: string[]; inputs: string; outputs: string; parameters: Record<string, string>; constraints: string }
 const nodes: Node[] = [
@@ -20,9 +20,9 @@ const functionId = ref('active_power')
 const live = usePipelineReadModel(functionId)
 watch(functionId, () => { void live.refresh() })
 const pipelineSnapshot = computed(() => live.data.value)
-const pipelineUsable = computed(() => isUsableState(pipelineSnapshot.value))
+const pipelineUsable = computed(() => isUsableState(pipelineSnapshot.value) && (pipelineSnapshot.value?.stages.length ?? 0) > 0)
 const nodeRows = computed<Node[]>(() => {
-  if (!pipelineSnapshot.value || !pipelineUsable.value || !pipelineSnapshot.value.stages.length) return nodes
+  if (!pipelineSnapshot.value || !pipelineUsable.value) return props.mock ? nodes : []
   return pipelineSnapshot.value.stages.map(stage => ({
     id: stage.id, label: stage.label, algorithm: stage.algorithm ?? 'UNKNOWN',
     choices: [stage.algorithm ?? 'UNKNOWN'], inputs: stage.inputs.join(' / '),
@@ -54,9 +54,9 @@ function resetDraft(){selection.value={...selection.value,[node.value.id]:node.v
     </div>
     <el-alert v-if="mock" title="离线 Pipeline 示意：不执行控制器算法、不写入设备。" type="info" :closable="false" show-icon />
     <el-alert v-else-if="pipelineState==='error'" :title="pipelineError ?? 'Pipeline 接口不可达'" type="error" :closable="false" show-icon />
-    <el-alert v-else-if="!pipelineUsable" title="实时 Pipeline 数据尚未可用，以下节点为结构参考，不代表运行状态。" type="warning" :closable="false" show-icon />
+    <el-alert v-else-if="!pipelineUsable" title="实时 Pipeline 数据尚未可用，运行状态为 UNKNOWN；不展示示意算法或参数。" type="warning" :closable="false" show-icon />
     <el-alert v-else title="当前为实时 Pipeline 只读快照；候选算法与参数修改仅存于浏览器，不会写入控制器。" type="info" :closable="false" show-icon />
-    <el-row :gutter="12" class="pipeline-layout">
+    <el-row v-if="mock || pipelineUsable" :gutter="12" class="pipeline-layout">
       <el-col :xs="24" :lg="10"><div class="pipeline-nodes">
         <button v-for="(item,index) in nodeRows" :key="item.id" type="button" class="pipeline-node"
                 :class="{'pipeline-node--active':selectedId===item.id}" @click="selectedId=item.id">
@@ -89,6 +89,7 @@ function resetDraft(){selection.value={...selection.value,[node.value.id]:node.v
         </div>
       </section></el-col>
     </el-row>
+    <el-empty v-else description="暂无质量有效的 Controller Pipeline 快照" />
   </el-card>
 </template>
 
