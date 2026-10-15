@@ -23,10 +23,12 @@ export function useResource<T>(load: () => Promise<T>, periodMs = 0): Resource<T
   let requestGeneration = 0
   let disposed = false
   let busy = false
+  let pending = false
 
   async function refresh(): Promise<void> {
     if (!isApiConfigured()) { data.value = null; state.value = 'unconfigured'; return }
-    if (busy || disposed) return
+    if (disposed) return
+    if (busy) { pending = true; return }
     busy = true
     const generation = ++requestGeneration
     if (data.value === null) state.value = 'loading'
@@ -45,6 +47,10 @@ export function useResource<T>(load: () => Promise<T>, periodMs = 0): Resource<T
       error.value = cause instanceof Error ? cause.message : '数据获取失败'
     } finally {
       busy = false
+      if (pending && !disposed) {
+        pending = false
+        void refresh()
+      }
     }
   }
   onMounted(() => {
@@ -54,6 +60,7 @@ export function useResource<T>(load: () => Promise<T>, periodMs = 0): Resource<T
   onUnmounted(() => {
     disposed = true
     requestGeneration++
+    pending = false
     if (timer) clearInterval(timer)
   })
   return { data, state, error, updatedAt, refresh }
