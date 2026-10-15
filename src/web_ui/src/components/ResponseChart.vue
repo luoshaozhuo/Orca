@@ -21,5 +21,5 @@ const option=computed(()=>({
 <template><div class="trend-panel"><div class="trend-heading">{{title}} <span>MOCK DATA</span></div><BaseChart :option="option" height="330px" :aria-label="title" /></div></template>
 <style scoped>
 .trend-panel{min-width:0;width:100%}.trend-heading{font-weight:var(--app-font-weight-semibold);font-size:var(--app-font-panel-title);margin-bottom:var(--app-space-2)}.trend-heading span{font-size:var(--app-font-caption);color:var(--app-text-secondary);font-weight:var(--app-font-weight-regular);margin-left:var(--app-space-2)}
-.trend-chart{height:330px;width:100%;min-width:0}
+
 </style>
