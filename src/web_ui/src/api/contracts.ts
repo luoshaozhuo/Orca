@@ -37,6 +37,8 @@ export interface StationSnapshot {
   periodDeviationMs: Measurement
 }
 export interface ControlFunction {
+  timestamp: string
+  quality: DataQuality
   id: string
   name: string
   enabled: boolean | null
@@ -63,6 +65,8 @@ export interface CapabilitySnapshot {
   timestamp: string
 }
 export interface DeviceSnapshot {
+  timestamp: string
+  quality: DataQuality
   id: string
   type: string
   availablePower: Measurement
@@ -103,6 +107,29 @@ export interface ControllerConfiguration {
 export interface ConfigValidation {
   valid: boolean
   errors: Array<{ path: string; message: string }>
+}
+/** Save and apply are distinct privileged commands. The current read-side UI does not execute them. */
+export interface ConfigurationDraftSaveRequest {
+  candidate: ControllerConfiguration
+  expectedRevision: string
+  validationRevision: string
+}
+export interface ConfigurationDraftReceipt {
+  draftId: string
+  revision: string
+  savedAt: string
+}
+export interface ConfigurationApplyRequest {
+  draftId: string
+  expectedRuntimeRevision: string
+  approvalReference: string
+  operationId: string
+}
+export interface ConfigurationApplyReceipt {
+  operationId: string
+  state: 'PENDING' | 'APPLIED' | 'REJECTED' | 'UNKNOWN'
+  runtimeRevision: string | null
+  reason: string | null
 }
 export interface OfflineExperiment {
   id: string
