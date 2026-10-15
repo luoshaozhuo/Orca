@@ -70,12 +70,12 @@ const chartOption = computed<EChartsOption>(() => {
       <h2 class="app-panel-title">全场运行仪表与同步趋势</h2>
       <span class="app-caption">模拟数据 · 公共时间轴</span>
     </div>
-    <div class="station-trend__meters">
-      <div v-for="c in channels" :key="c.name" class="station-trend__meter">
+    <el-row :gutter="12" class="station-trend__meters">
+      <el-col v-for="c in channels" :key="c.name" :xs="12" :lg="6" class="station-trend__meter">
         <span class="metric-label">{{ c.name }}</span>
         <strong class="app-metric">{{ c.value.toFixed(2) }} <small>{{ c.unit }}</small></strong>
-      </div>
-    </div>
+      </el-col>
+    </el-row>
     <el-checkbox-group v-model="selected" class="station-trend__selector">
       <el-checkbox v-for="c in channels" :key="c.name" :value="c.name" :label="c.name" />
     </el-checkbox-group>
@@ -85,10 +85,10 @@ const chartOption = computed<EChartsOption>(() => {
 
 <style scoped>
 .station-trend__heading{display:flex;justify-content:space-between;gap:var(--app-space-3);align-items:center}
-.station-trend__meters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--app-space-3);margin:var(--app-space-4) 0}
-.station-trend__meter{display:flex;flex-direction:column;gap:var(--app-space-2);min-width:0}
+.station-trend__meters{row-gap:var(--app-space-3);margin:var(--app-space-4) 0}
+.station-trend__meter{display:flex;flex-direction:column;gap:var(--app-space-2);min-width:0;overflow-wrap:anywhere}
 .station-trend__meter small{font-size:var(--app-font-label)}
 .station-trend__selector{display:flex;flex-wrap:wrap;gap:var(--app-space-3)}
 .station-trend__chart{width:100%;min-width:0}
-@media(max-width:767px){.station-trend__meters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
 </style>
