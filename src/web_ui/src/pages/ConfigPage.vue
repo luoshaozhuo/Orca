@@ -35,7 +35,7 @@ const selectedConfig = ref('station')
                 <el-card shadow="never" class="panel-card panel"><h2 class="app-panel-title panel-title">机组与资源管理</h2>
                   <div class="toolbar"><el-input placeholder="搜索机组名称或编号" disabled />
                     <el-select disabled placeholder="设备类型" /></div>
-                  <el-table :data="mock?units:[]" stripe style="margin-top:16px">
+                  <el-table :data="mock?units:[]" stripe >
                     <el-table-column prop="id" label="设备编号"/><el-table-column prop="type" label="类型"/><el-table-column prop="available" label="可用容量 (MW)"/>
                     <el-table-column label="控制参与"><template #default="scope"><el-tag :type="scope.row.enabled?'success':'info'">{{scope.row.enabled?'参与':'退出'}}</el-tag></template></el-table-column><el-table-column prop="status" label="运行状态"/><el-table-column prop="weight" label="控制权重"/>
                   </el-table>
