@@ -32,16 +32,16 @@ function resetDraft(){selection.value={...selection.value,[node.value.id]:node.v
       </el-select>
     </div>
     <el-alert title="无写入工程预览：节点不可暂停在线闭环；断点和单步仅允许离线回放或仿真。" type="info" :closable="false" show-icon />
-    <div class="pipeline-layout">
-      <div class="pipeline-nodes">
+    <el-row :gutter="12" class="pipeline-layout">
+      <el-col :xs="24" :lg="10"><div class="pipeline-nodes">
         <button v-for="(item,index) in nodes" :key="item.id" type="button" class="pipeline-node"
                 :class="{'pipeline-node--active':selectedId===item.id}" @click="selectedId=item.id">
           <span class="pipeline-node__index">{{ index + 1 }}</span>
           <span class="pipeline-node__body"><strong>{{ item.label }}</strong><small>{{ selection[item.id] ?? item.algorithm }}</small></span>
           <span aria-hidden="true">›</span>
         </button>
-      </div>
-      <section class="pipeline-inspector" aria-label="节点检查器">
+      </div></el-col>
+      <el-col :xs="24" :lg="14"><section class="pipeline-inspector" aria-label="节点检查器">
         <h3 class="app-section-title">{{ node.label }}</h3>
         <el-descriptions :column="1" border size="small">
           <el-descriptions-item label="输入">{{ node.inputs }}</el-descriptions-item>
@@ -63,25 +63,25 @@ function resetDraft(){selection.value={...selection.value,[node.value.id]:node.v
           <el-button @click="resetDraft">重置候选更改</el-button>
           <el-button type="primary" disabled>应用到 Controller（未接入）</el-button>
         </div>
-      </section>
-    </div>
+      </section></el-col>
+    </el-row>
   </div>
 </template>
 
 <style scoped>
 .pipeline-header{display:flex;justify-content:space-between;align-items:start;gap:var(--app-space-4);margin-bottom:var(--app-space-3)}
 .pipeline-header p{margin:var(--app-space-2) 0 0}
-.pipeline-layout{display:grid;grid-template-columns:minmax(230px,1fr) minmax(320px,1.5fr);gap:var(--app-space-3);margin-top:var(--app-space-3)}
+.pipeline-layout{margin-top:var(--app-space-3);row-gap:var(--app-space-3)}
+.pipeline-layout>.el-col{min-width:0}
 .pipeline-nodes{display:flex;flex-direction:column;gap:var(--app-space-2)}
 .pipeline-node{display:flex;align-items:center;gap:var(--app-space-3);text-align:left;background:var(--app-bg-surface);border:1px solid var(--app-border);border-radius:var(--app-control-radius);padding:var(--app-space-3);color:var(--app-text-primary);cursor:pointer;font:inherit;width:100%}
 .pipeline-node:hover,.pipeline-node--active{border-color:var(--el-color-primary);background:var(--el-color-primary-light-9)}
 .pipeline-node__index{font-weight:var(--app-font-weight-semibold);color:var(--app-text-secondary)}
-.pipeline-node__body{flex:1;display:flex;flex-direction:column;gap:var(--app-space-1)}
+.pipeline-node__body{flex:1;min-width:0;display:flex;flex-direction:column;gap:var(--app-space-1);overflow-wrap:anywhere}
 .pipeline-node__body small{color:var(--app-text-secondary);font-size:var(--app-font-caption)}
 .pipeline-inspector{min-width:0;border:1px solid var(--app-border-soft);border-radius:var(--app-panel-radius);padding:var(--app-space-4)}
 .pipeline-inspector h3{margin-bottom:var(--app-space-3)}
 .pipeline-form{margin-top:var(--app-space-3)}
 .pipeline-actions{display:flex;justify-content:flex-end;gap:var(--app-space-2);margin-top:var(--app-space-3);flex-wrap:wrap}
-@media(max-width:991px){.pipeline-layout{grid-template-columns:1fr}}
 @media(max-width:767px){.pipeline-header{flex-direction:column}}
 </style>
