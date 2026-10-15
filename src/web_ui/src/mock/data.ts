@@ -1,3 +1,6 @@
+import type { PlotPoint } from '../api/contracts'
+export type { PlotPoint } from '../api/contracts'
+
 export const station = {
   name:'海上示范风储电站',rated:300,active:186.7,reactive:12.4,voltage:35.12,frequency:49.98,
   available:263.8,period:200,periodDeviation:3.8,strategy:'default',version:'2026.10.14-rc1',
@@ -37,7 +40,6 @@ export const tests = [
  {id:'AGC-013',date:'2026-10-14 13:35',algorithm:'PI',settle:24.8,overshoot:4.6,error:0.95},
  {id:'AGC-012',date:'2026-10-14 11:10',algorithm:'前馈 + PI',settle:19.4,overshoot:2.5,error:0.71}
 ]
-export type PlotPoint={time:string; target:number; actual:number; total:number; limit:number}
 export const response:PlotPoint[]=Array.from({length:91},(_,i)=>{
  const sec=i*2,after=Math.max(sec-20,0)
  const target=sec<20?160:195

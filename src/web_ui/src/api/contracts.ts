@@ -1,0 +1,214 @@
+/** Read-only web console contracts. All timestamp values are RFC 3339 with offset. */
+export type DataQuality = 'GOOD' | 'STALE' | 'BAD' | 'UNKNOWN'
+export type HealthState = 'healthy' | 'unavailable' | 'unknown'
+export interface Measurement {
+  value: number | null
+  unit: string
+  timestamp: string | null
+  quality: DataQuality
+}
+export interface ServiceHealth {
+  id: string
+  name: string
+  state: HealthState
+  detail: string
+  checkedAt?: string
+}
+export interface RuntimeInfo {
+  controllerVersion: string
+  apiVersion: string
+  buildRevision: string | null
+}
+export interface StationSnapshot {
+  timestamp: string
+  quality: DataQuality
+  version: string | null
+  mode: string | null
+  authority: string | null
+  authorityGeneration?: string | null
+  safetyState?: 'READY' | 'BLOCKED' | 'UNKNOWN'
+  writeEnabled?: boolean | null
+  strategy: string | null
+  activePower: Measurement
+  targetPower?: Measurement
+  reactivePower: Measurement
+  voltage: Measurement
+  frequency: Measurement
+  ratedPower: Measurement
+  availablePower: Measurement
+  periodMs: Measurement
+  periodDeviationMs: Measurement
+}
+export interface ControlFunction {
+  timestamp: string
+  quality: DataQuality
+  id: string
+  name: string
+  enabled: boolean | null
+  responseState: string
+  algorithm: string | null
+  uptimeSeconds: number | null
+  target: Measurement
+  actual: Measurement
+  constraint: string | null
+}
+export interface CapabilityReason {
+  deviceId: string
+  category: string
+  reason: string
+  limitedPower: Measurement
+  since: string | null
+}
+export interface CapabilitySnapshot {
+  id: string
+  label: string
+  measurement: Measurement
+  summary: string
+  reasons: CapabilityReason[]
+  timestamp: string
+}
+export interface DeviceSnapshot {
+  timestamp: string
+  quality: DataQuality
+  id: string
+  type: string
+  availablePower: Measurement
+  activePower: Measurement
+  targetPower: Measurement
+  participation: boolean | null
+  status: string
+  weight: number | null
+}
+export type ExecutionState = 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'UNKNOWN' | 'REJECTED'
+export interface AuditEvent {
+  id: string
+  timestamp: string
+  kind: string
+  objectId: string
+  result: ExecutionState
+  commandId: string | null
+  detail: string
+}
+/** Chart projection only; not a live Controller API DTO. */
+export interface PlotPoint {
+  time: string
+  target: number
+  actual: number
+  total: number
+  limit: number
+}
+export interface HistoryPoint {
+  timestamp: string
+  value: number | null
+  quality: DataQuality
+}
+export interface HistorySeries {
+  signalId: string
+  unit: string
+  points: HistoryPoint[]
+}
+export interface ControllerConfiguration {
+  version: string
+  revision: string
+  updatedAt: string
+  station: Record<string, unknown>
+  controls: Record<string, unknown>
+  coordination: Record<string, unknown>
+}
+export interface ConfigValidation {
+  valid: boolean
+  errors: Array<{ path: string; message: string }>
+}
+/** Save and apply are distinct privileged commands. The current read-side UI does not execute them. */
+export interface ConfigurationDraftSaveRequest {
+  candidate: ControllerConfiguration
+  expectedRevision: string
+  validationRevision: string
+}
+export interface ConfigurationDraftReceipt {
+  draftId: string
+  revision: string
+  savedAt: string
+}
+export interface ConfigurationApplyRequest {
+  draftId: string
+  expectedRuntimeRevision: string
+  approvalReference: string
+  operationId: string
+}
+export interface ConfigurationApplyReceipt {
+  operationId: string
+  state: 'PENDING' | 'APPLIED' | 'REJECTED' | 'UNKNOWN'
+  runtimeRevision: string | null
+  reason: string | null
+}
+export interface PerformanceResult {
+  id: string
+  timestamp: string
+  functionId: string
+  algorithm: string
+  validity: 'VALID' | 'INVALID' | 'UNKNOWN'
+  settlingTimeS: number | null
+  overshootPercent: number | null
+  trackingErrorMW: number | null
+  evidenceIds: string[]
+}
+export interface AssessmentResult {
+  id: string
+  name: string
+  standard: string
+  criterion: string
+  status: 'PASS' | 'FAIL' | 'INDETERMINATE' | 'NOT_EVALUATED'
+  evaluatedAt: string | null
+  evidenceIds: string[]
+  detail: string
+}
+export interface IdentificationResult {
+  id: string
+  modelFamily: string
+  status: 'DRAFT' | 'VALIDATED' | 'REJECTED'
+  createdAt: string
+  validationSetId: string | null
+  fitScore: number | null
+  residualSummary: string
+  parameters: Record<string, number>
+}
+export interface DiagnosticFinding {
+  id: string
+  name: string
+  contribution: string
+  evidenceIds: string[]
+  timestamp: string
+  quality: DataQuality
+  detail: string
+}
+export interface OfflineExperiment {
+  id: string
+  createdAt: string
+  algorithmId: string
+  parameters: Record<string, number>
+  status: 'DRAFT' | 'EVALUATED' | 'REJECTED'
+  metrics: Record<string, number | null>
+}
+export interface PipelineStage {
+  id: string
+  label: string
+  algorithm: string | null
+  parameters: Record<string, unknown>
+  inputs: string[]
+  outputs: string[]
+  status: 'READY' | 'BLOCKED' | 'UNKNOWN'
+}
+export interface PipelineSnapshot {
+  functionId: string
+  timestamp: string
+  quality: DataQuality
+  stages: PipelineStage[]
+}
+export interface CommandAudit {
+  commandId: string
+  state: ExecutionState
+  timestamp: string
+  deviceResults: Array<{ deviceId: string; state: ExecutionState; reason: string | null }>
+}
+/** Commands are intentionally absent: read-side contracts must not bypass controller interlocks. */
