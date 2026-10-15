@@ -70,9 +70,17 @@ const statusType = (state: Health) => state === 'healthy' ? 'success' : state ==
               ]" :key="m.label" :xs="24" :sm="12" :lg="6"><MetricCard v-bind="m" /></el-col>
             </el-row>
             <el-card shadow="never" class="panel-card panel overview-mode">
-              <div><span class="metric-label">当前控制模式</span><strong>{{ mock ? '远方自动 · AGC + PFR' : (stationHealthy ? stationSnapshot?.mode ?? '未知' : '未知 · 数据无效') }}</strong></div>
-              <div><span class="metric-label">控制权</span><strong>{{ mock ? station.controlAuthority : (stationHealthy ? stationSnapshot?.authority ?? '未知' : '未知') }}</strong></div>
-              <div><span class="metric-label">执行策略</span><strong>{{ mock ? station.strategy : (stationHealthy ? stationSnapshot?.strategy ?? '未知' : '未知') }}</strong></div>
+              <el-row :gutter="16">
+                <el-col :xs="24" :md="8"><span class="metric-label">当前控制模式</span>
+                  <strong>{{ mock ? '远方自动 · AGC + PFR' : (stationHealthy ? stationSnapshot?.mode ?? '未知' : '未知 · 数据无效') }}</strong>
+                </el-col>
+                <el-col :xs="24" :md="8"><span class="metric-label">控制权</span>
+                  <strong>{{ mock ? station.controlAuthority : (stationHealthy ? stationSnapshot?.authority ?? '未知' : '未知') }}</strong>
+                </el-col>
+                <el-col :xs="24" :md="8"><span class="metric-label">执行策略</span>
+                  <strong>{{ mock ? station.strategy : (stationHealthy ? stationSnapshot?.strategy ?? '未知' : '未知') }}</strong>
+                </el-col>
+              </el-row>
             </el-card>
             <h2 class="app-panel-title panel-title">全场可控能力</h2>
             <el-empty v-if="!mock && !renderedCapabilities.length" description="可控能力快照暂不可用，不推断设备健康或可控容量" />
